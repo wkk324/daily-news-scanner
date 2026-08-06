@@ -27,33 +27,35 @@ if "keyword" not in st.session_state:
 col1, col2, col3, col4 = st.columns(4)
 if col1.button("사회 뉴스"): st.session_state.keyword = "사회"
 if col2.button("경제 뉴스"): st.session_state.keyword = "경제"
-if col3.button("IT/과학 뉴스"): st.session_state.keyword = "IT 과학"
+if col3.button("IT/과학 뉴스"): st.session_state.keyword = "IT"
 if col4.button("정치 뉴스"): st.session_state.keyword = "정치"
 
 manual_keyword = st.text_input("직접 키워드 입력:", value=st.session_state.keyword)
 if manual_keyword: st.session_state.keyword = manual_keyword
 
-# 뉴스 크롤링 로직 (선택자 수정)
+# 구글 뉴스 RSS 크롤링 (차단 없이 가장 깔끔하게 작동합니다)
 if st.session_state.keyword:
-    st.subheader(f"'{st.session_state.keyword}' 관련 최신 뉴스")
-    url = f"https://search.naver.com/search.naver?where=news&query={st.session_state.keyword}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    st.subheader(f"'{st.session_state.keyword}' 관련 최신 구글 뉴스")
     
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
+    # 구글 뉴스 RSS 주소 (한국어/한국 지역 기준)
+    rss_url = f"https://news.google.com/rss/search?q={st.session_state.keyword}&hl=ko&gl=KR&ceid=KR:ko"
     
-    # 2026년 검색 구조에 맞춰 제목/링크를 찾기 위한 여러 선택자 시도
-    articles = soup.select("a.news_tit") or soup.select(".list_news .tit") or soup.select("div.news_wrap a")
+    response = requests.get(rss_url)
+    soup = BeautifulSoup(response.content, "xml") # XML 형식으로 파싱
+    
+    items = soup.find_all("item")
 
-    if articles:
+    if items:
         news_data = []
-        for a in articles:
-            if a.get_text().strip():
-                news_data.append({"제목": a.get_text().strip(), "링크": a.get("href")})
+        for item in items[:15]: # 상위 15개 추출
+            title = item.find("title").text
+            link = item.find("link").text
+            news_data.append({"제목": title, "링크": link})
         
-        # 중복 제거 및 결과 출력
-        df = pd.DataFrame(news_data).drop_duplicates()
-        for idx, row in df.head(10).iterrows():
+        df = pd.DataFrame(news_data)
+        for idx, row in df.iterrows():
             st.markdown(f"**{idx+1}. [{row['제목']}]({row['링크']})**")
     else:
-        st.warning("네이버 검색 결과 구조가 변경되어 뉴스를 불러올 수 없습니다.")
+        st.warning("검색된 뉴스가 없습니다. 다른 키워드를 입력해 보세요.")
+else:
+    st.write("상단 버튼을 누르거나 키워드를 입력해 뉴스를 검색해 보세요.")
