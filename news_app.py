@@ -2,55 +2,50 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import requests
 import streamlit as st
+from datetime import datetime
 
-# 1. 웹페이지 화면 구성 (Streamlit)
-st.title("📰 나만의 맞춤형 뉴스 키워드 탐색기")
-st.write(
-    "관심 있는 키워드를 입력하시면 네이버 최신 뉴스를 싹 긁어와서 보여드립니다!"
-)
+# 1. 페이지 설정
+st.set_page_config(page_title="나만의 뉴스 탐색기", layout="wide")
+st.title("📰 오늘의 뉴스 탐색기")
 
-# 사용자 입력 받기
-keyword = st.text_input("검색할 키워드를 입력하세요 (예: 금리, 인공지능, 부동산)", "인공지능")
+# 날짜 및 날씨 정보 표시
+today = datetime.now().strftime("%Y년 %m월 %d일")
+st.write(f"📅 **오늘 날짜:** {today}")
+st.info("☀️ **서울 날씨:** 오늘은 최고 37℃로 매우 무덥습니다. 건강에 유의하세요!")
 
-if st.button("뉴스 검색하기"):
-  if not keyword:
-    st.warning("검색어를 입력해주세요!")
-  else:
-    with st.spinner(
-        "네이버에서 최신 뉴스를 수집하고 있습니다 잠시만 기다려주세요..."
-    ):
-      # 2. 네이버 뉴스 검색 URL 생성
-      url = f"https://search.naver.com/search.naver?where=news&query={keyword}"
+st.write("---")
 
-      # 3. 헤더 설정 (네이버가 봇 차단하지 않도록 일반 브라우저인 것처럼 위장)
-      headers = {
-          "User-Agent": (
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
-              " like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          )
-      }
+# 2. 키워드 선택 버튼
+col1, col2, col3, col4 = st.columns(4)
+keywords = {"사회": "사회", "경제": "경제", "IT/과학": "IT 과학", "정치": "정치"}
+selected_keyword = None
 
-      response = requests.get(url, headers=headers)
-      soup = BeautifulSoup(response.text, "html.parser")
+if col1.button("사회 뉴스"): selected_keyword = "사회"
+if col2.button("경제 뉴스"): selected_keyword = "경제"
+if col3.button("IT/과학 뉴스"): selected_keyword = "IT 과학"
+if col4.button("정치 뉴스"): selected_keyword = "정치"
 
-      # 4. 뉴스 기사 제목과 링크 추출
-      news_list = []
-      articles = soup.select(".news_tit")
+# 검색창
+manual_keyword = st.text_input("또는 직접 키워드를 입력하세요:", "")
+keyword = manual_keyword if manual_keyword else selected_keyword
 
-      for article in articles:
-        title = article.get_text()
-        link = article["href"]
-        news_list.append({"제목": title, "링크": link})
+# 3. 뉴스 수집 함수
+if keyword:
+    st.subheader(f"'{keyword}' 관련 최신 뉴스입니다.")
+    url = f"https://search.naver.com/search.naver?where=news&query={keyword}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
+    articles = soup.select(".news_tit")
 
-      # 5. 결과 화면에 출력
-      if len(news_list) > 0:
-        st.success(f"총 {len(news_list)}개의 뉴스를 찾아냈습니다!")
+    news_list = []
+    for article in articles:
+        news_list.append({"제목": article.get_text(), "링크": article["href"]})
 
-        # 보기 좋게 표 형태로 출력 (링크 클릭 가능)
-        df = pd.DataFrame(news_list)
-
-        for idx, row in df.iterrows():
-          st.markdown(f"**{idx+1}. [{row['제목']}]({row['링크']})**")
-          st.write("---")
-      else:
-        st.info("검색 결과가 없습니다. 다른 키워드로 시도해 보세요.")
+    # 4. 결과 출력
+    df = pd.DataFrame(news_list)
+    for idx, row in df.iterrows():
+        st.markdown(f"{idx+1}. [{row['제목']}]({row['링크']})")
+else:
+    st.write("상단 버튼을 누르거나 키워드를 입력해 뉴스를 검색해 보세요.")
