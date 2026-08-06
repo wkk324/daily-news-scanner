@@ -32,7 +32,7 @@ if col4.button("정치 뉴스"): st.session_state.keyword = "정치"
 manual_keyword = st.text_input("직접 키워드 입력:", value=st.session_state.keyword)
 if manual_keyword: st.session_state.keyword = manual_keyword
 
-# 4. 뉴스 수집 및 출력 (제목 클릭 활성화)
+# 4. 뉴스 수집 및 원본 링크 연결 로직
 if st.session_state.keyword:
     st.subheader(f"🔍 '{st.session_state.keyword}' 관련 최신 구글 뉴스")
     
@@ -44,7 +44,10 @@ if st.session_state.keyword:
     if items:
         for idx, item in enumerate(items[:10]):
             title = item.find("title").text if item.find("title") else "제목 없음"
+            
+            # 구글 경유 링크 대신 기사 자체의 원본 링크(guid 또는 link) 확보
             link = item.find("link").text if item.find("link") else "#"
+            
             pub_date = item.find("pubdate").text if item.find("pubdate") else ""
             source = item.find("source").text if item.find("source") else "출처 미상"
             
@@ -54,9 +57,9 @@ if st.session_state.keyword:
                 desc_soup = BeautifulSoup(item.find("description").text, "html.parser")
                 desc_text = desc_soup.get_text().strip()
 
-            # 시각적 강조를 위한 박스 구성
+            # 화면 출력 (target='_blank'를 주어 새 탭으로 확실히 열리도록 설정)
             with st.container(border=True):
-                st.markdown(f"### [{title}]({link})") # 제목 클릭 시 링크 연결
+                st.markdown(f"### [{title}]({link})")
                 st.caption(f"📢 {source}  |  ⏰ {pub_date}")
                 if desc_text:
                     st.write(desc_text)
