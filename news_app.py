@@ -33,23 +33,22 @@ if col4.button("정치 뉴스"): st.session_state.keyword = "정치"
 manual_keyword = st.text_input("직접 키워드 입력:", value=st.session_state.keyword)
 if manual_keyword: st.session_state.keyword = manual_keyword
 
-# 구글 뉴스 RSS 크롤링 (차단 없이 가장 깔끔하게 작동합니다)
+# 구글 뉴스 RSS 크롤링 (html.parser 사용으로 에러 방지)
 if st.session_state.keyword:
     st.subheader(f"'{st.session_state.keyword}' 관련 최신 구글 뉴스")
     
-    # 구글 뉴스 RSS 주소 (한국어/한국 지역 기준)
     rss_url = f"https://news.google.com/rss/search?q={st.session_state.keyword}&hl=ko&gl=KR&ceid=KR:ko"
     
     response = requests.get(rss_url)
-    soup = BeautifulSoup(response.content, "xml") # XML 형식으로 파싱
+    soup = BeautifulSoup(response.content, "html.parser") # html.parser로 변경
     
     items = soup.find_all("item")
 
     if items:
         news_data = []
-        for item in items[:15]: # 상위 15개 추출
-            title = item.find("title").text
-            link = item.find("link").text
+        for item in items[:15]:
+            title = item.find("title").text if item.find("title") else "제목 없음"
+            link = item.find("link").text if item.find("link") else "#"
             news_data.append({"제목": title, "링크": link})
         
         df = pd.DataFrame(news_data)
