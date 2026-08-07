@@ -103,13 +103,6 @@ def build_mini_calendar_html(year: int, month: int, today_day: int, cell_w: int 
     return "".join(rows)
 
 
-# 새로고침 처리: Streamlit 버튼 대신 순수 HTML 링크(?refresh=1)를 쓰기 때문에
-# 이 방식은 CSS 클래스 후킹이 필요 없어 항상 확실하게 스타일이 적용됨.
-if "refresh" in st.query_params:
-    st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
-    st.query_params.clear()
-    st.rerun()
-
 st.title("📰 오늘의 뉴스 탐색기")
 
 # 아래 컨텐츠 행(카테고리/달력/날씨)과 동일한 비율의 컬럼을 시간 행에도 그대로 사용해서,
@@ -118,17 +111,35 @@ LAYOUT_RATIOS = [1.3, 1, 1]  # [카테고리, 달력, 날씨] - 카테고리가 
 
 _, time_slot_col, _ = st.columns(LAYOUT_RATIOS)
 with time_slot_col:
-    # 시간 텍스트와 새로고침 화살표를 하나의 flex 줄에 같이 넣어서 바로 옆에 붙게 함.
+    # 시간 텍스트와 새로고침 버튼을 나란히 배치.
     # 음수 margin-top으로 타이틀 줄 쪽으로 끌어올려서, 타이틀 밑부분과 이 줄의 밑부분이 같은 높이에 오도록 함.
-    # 새로고침 크기를 절반(48px→24px)으로 줄임.
-    st.markdown(
-        f'''<div style="display:flex; align-items:center; gap:8px; margin-top:-55px; margin-bottom:-8px;">
-    <span style="font-size:30px; font-weight:700; line-height:1.3; white-space:nowrap;">🕐 {current_time_str}</span>
-    <a href="?refresh=1" title="새로고침 (기사/요약 다시 받아오기)"
-       style="text-decoration:none; color:#111; font-size:24px; font-weight:700; line-height:1;">↻</a>
-</div>''',
-        unsafe_allow_html=True,
-    )
+    # 새로고침은 <a href> 링크 대신 st.button을 씀: 링크 방식은 iframe 환경(Streamlit 배포 시 자주 발생)에서
+    # 새 창으로 열려버리는 문제가 있었는데, st.button은 페이지 이동 없이 같은 화면에서 다시 그려줘서 안전함.
+    with st.container(key="time_row"):
+        time_col, refresh_col = st.columns([10, 1])
+        with time_col:
+            st.markdown(
+                f'<div style="font-size:30px; font-weight:700; line-height:1.3; white-space:nowrap;">🕐 {current_time_str}</div>',
+                unsafe_allow_html=True,
+            )
+        with refresh_col:
+            if st.button("↻", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
+                st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
+                st.rerun()
+
+# time_row 컨테이너 자체에 직접 margin을 줘서 위치 조정 (컨테이너의 자기 클래스에 스타일을 주는 방식이라
+# 내부 구조와 상관없이 안정적으로 적용됨).
+st.markdown(
+    """
+    <style>
+    .st-key-time_row {
+        margin-top: -55px;
+        margin-bottom: -8px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 outer_left, col_date, col_weather = st.columns(LAYOUT_RATIOS)
