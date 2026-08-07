@@ -192,27 +192,44 @@ def fetch_weather(lat: float, lon: float):
 
 
 @st.cache_data(ttl=3600, show_spinner=False)  # 1시간 캐시 - 같은 좌표를 반복 조회하지 않음
-def reverse_geocode(lat: float, lon: float) -> str:
+def reverse_geocode(lat: float, lon: float):
     """좌표를 '시/도 구 동' 형태의 사람이 읽을 수 있는 지명으로 변환한다 (OpenStreetMap Nominatim, 무료).
-    실패하면 '내 위치'를 그대로 반환."""
+    (라벨, 원본 address 딕셔너리) 튜플을 반환 - 원본은 필드명이 예상과 다를 때 디버깅용."""
     try:
         url = "https://nominatim.openstreetmap.org/reverse"
-        params = {"format": "json", "lat": lat, "lon": lon, "accept-language": "ko", "zoom": 18}
+        params = {
+            "format": "jsonv2",
+            "lat": lat,
+            "lon": lon,
+            "accept-language": "ko",
+            "zoom": 16,  # 너무 높으면(18+) 건물/도로 단위까지 내려가서 오히려 구/동이 안 잡힐 수 있음
+            "addressdetails": 1,
+        }
         # Nominatim은 User-Agent 헤더가 없으면 요청을 거부하므로 반드시 넣어야 함
-        headers = {"User-Agent": "news-explorer-app/1.0"}
+        headers = {"User-Agent": "news-explorer-app/1.0 (contact: none)"}
         res = requests.get(url, params=params, headers=headers, timeout=5)
         res.raise_for_status()
         address = res.json().get("address", {})
 
-        city = address.get("city") or address.get("province") or ""
-        # 국내 행정구역상 '구'는 city_district/borough, '동'은 neighbourhood/suburb/quarter에 담기는 경우가 많음
-        gu = address.get("borough") or address.get("city_district") or ""
-        dong = address.get("neighbourhood") or address.get("suburb") or address.get("quarter") or ""
+        city = (
+            address.get("city") or address.get("province") or address.get("state") or ""
+        )
+        # 국내 행정구역상 '구'는 city_district/borough/county, '동'은
+        # neighbourhood/suburb/quarter/town/village 중 하나에 담기는 경우가 많음 (지역마다 다름)
+        gu = (
+            address.get("borough") or address.get("city_district")
+            or address.get("county") or ""
+        )
+        dong = (
+            address.get("neighbourhood") or address.get("suburb")
+            or address.get("quarter") or address.get("town") or address.get("village") or ""
+        )
 
         parts = [p for p in (city, gu, dong) if p]
-        return " ".join(parts) if parts else "내 위치"
+        label = " ".join(parts) if parts else "내 위치"
+        return label, address
     except Exception:
-        return "내 위치"
+        return "내 위치", {}
 
 
 # 브라우저 위치 정보 요청: lat/lon이 아직 URL에 없으면, 위치 권한을 요청하는 보이지 않는
@@ -221,10 +238,11 @@ def reverse_geocode(lat: float, lon: float) -> str:
 if "lat" in st.query_params and "lon" in st.query_params:
     weather_lat = float(st.query_params["lat"])
     weather_lon = float(st.query_params["lon"])
-    weather_location_label = reverse_geocode(weather_lat, weather_lon)  # 예: "인천 남동구 만수동"
+    weather_location_label, _geocode_debug = reverse_geocode(weather_lat, weather_lon)  # 예: "인천 남동구 만수동"
 else:
     weather_lat, weather_lon = 37.5665, 126.9780  # 기본값: 서울
     weather_location_label = "서울"
+    _geocode_debug = {}
     st.components.v1.html(
         """
         <script>
@@ -256,6 +274,8 @@ with col_weather:
         st.markdown(
             f"{weather_emoji(current_code)} **현재 {weather_location_label} 기온:** {current_temp}℃"
         )
+        if _geocode_debug:
+            st.caption(f"(위치 디버그: {_geocode_debug})")  # 원인 파악용 - 문제 없으면 나중에 지워도 됨
 
         # 시간대별 예보를 3시간 간격으로 위에서 아래로 나열
         hourly = weather_res["hourly"]
