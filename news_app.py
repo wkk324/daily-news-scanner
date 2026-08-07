@@ -214,27 +214,14 @@ with col_category:
                 st.session_state.keyword = query
                 st.session_state.label = label
 
-    manual_keyword = st.text_input("직접 키워드 입력:", value=st.session_state.keyword)
-    if manual_keyword and manual_keyword != st.session_state.keyword:
+    manual_keyword = st.text_input("직접 키워드 입력:", value=st.session_state.label)
+    if manual_keyword and manual_keyword != st.session_state.label:
         st.session_state.keyword = manual_keyword
         st.session_state.label = manual_keyword  # 직접 입력한 경우 라벨=검색어
 
 st.write("---")
 
 # 3. 구글 뉴스 RSS 연동에 필요한 함수 정의
-cat_items = list(CATEGORIES.items())
-for row_start in range(0, len(cat_items), 5):  # 5개씩 2줄로 배치
-    row = cat_items[row_start:row_start + 5]
-    cols = st.columns(5)
-    for col, (label, query) in zip(cols, row):
-        if col.button(label, use_container_width=True):
-            st.session_state.keyword = query
-            st.session_state.label = label
-
-manual_keyword = st.text_input("직접 키워드 입력:", value=st.session_state.keyword)
-if manual_keyword and manual_keyword != st.session_state.keyword:
-    st.session_state.keyword = manual_keyword
-    st.session_state.label = manual_keyword  # 직접 입력한 경우 라벨=검색어
 
 
 def format_pubdate(raw: str) -> str:
