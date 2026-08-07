@@ -137,12 +137,13 @@ st.markdown(
         margin-bottom: -8px;
     }
     .st-key-time_row [data-testid="stHorizontalBlock"] {
-        gap: 4px !important;
+        gap: 0px !important;
     }
     .st-key-time_row [data-testid="stColumn"]:last-child {
         flex: 0 0 auto !important;
         width: auto !important;
         min-width: 0 !important;
+        margin-left: -12px !important;
     }
     </style>
     """,
