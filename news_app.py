@@ -78,34 +78,36 @@ def build_mini_calendar_html(year: int, month: int, today_day: int, cell_w: int 
     return "".join(rows)
 
 
-time_col, refresh_col = st.columns([8, 1])
+time_col, refresh_col, _spacer = st.columns([5, 1, 6])
 with time_col:
     st.markdown(
         f'<div style="font-size:30px; font-weight:700; line-height:1.3;">🕐 {current_time_str}</div>',
         unsafe_allow_html=True,
     )
 with refresh_col:
-    if st.button("↻", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
+    if st.button("🔄", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
         st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
         st.rerun()
 
 # 새로고침 버튼을 브라우저 새로고침 아이콘처럼 - 테두리/배경 없이 검은 화살표만, 크게
+# filter:brightness(0)로 원래 색깔 이모지를 검은 실루엣으로 강제 변환 (특정 유니코드 화살표 문자가
+# 폰트에 따라 아예 안 보이는 문제를 피하기 위해, 확실히 렌더링되는 🔄 이모지를 사용)
 st.markdown(
     """
     <style>
     .st-key-refresh_btn button {
         background: transparent !important;
         border: none !important;
-        color: #111 !important;
-        font-size: 27px !important;
-        font-weight: 700 !important;
-        line-height: 1 !important;
         padding: 0 !important;
         box-shadow: none !important;
+        font-size: 34px !important;
+        line-height: 1 !important;
+        filter: grayscale(100%) brightness(0);
+        opacity: 0.85;
+        margin-top: 4px;
     }
     .st-key-refresh_btn button:hover {
-        color: #555 !important;
-        background: transparent !important;
+        opacity: 1;
     }
     </style>
     """,
@@ -114,8 +116,15 @@ st.markdown(
 
 col_date, col_weather = st.columns([1, 1.3])
 
+CALENDAR_WRAP_HEIGHT = 264  # 날씨란 전체 높이(현재기온 줄 + 시간대별 박스)와 맞춘 값
+
 with col_date:
-    st.markdown(build_mini_calendar_html(now.year, now.month, now.day, cell_w=36), unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="height:{CALENDAR_WRAP_HEIGHT}px;">'
+        + build_mini_calendar_html(now.year, now.month, now.day, cell_w=36)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
 
 with col_weather:
     try:
