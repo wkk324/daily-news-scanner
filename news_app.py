@@ -151,7 +151,7 @@ st.markdown(
 )
 
 
-col_date, col_weather, col_category = st.columns([1, 1.1, 2.2])
+col_category, col_date, col_weather = st.columns([2.2, 1, 1.1])
 
 CALENDAR_WRAP_HEIGHT = 282  # '📅 달력' 제목 줄이 추가된 만큼 줄여서 날씨란과 바닥을 맞춤
 
