@@ -206,6 +206,8 @@ with outer_left:
                 st.session_state.keyword = query
                 st.session_state.label = label
 
+    st.markdown('<div style="height:110px;"></div>', unsafe_allow_html=True)  # 달력 아래쪽 높이와 맞추기 위한 여백
+
     label_col, input_col = st.columns([1, 4])
     with label_col:
         st.markdown(
