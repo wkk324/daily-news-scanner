@@ -128,7 +128,9 @@ with time_slot_col:
                 st.rerun()
 
 # time_row 컨테이너 자체에 직접 margin을 줘서 위치 조정.
-# 내부 컬럼 gap도 줄이고 새로고침 버튼 컬럼을 내용물 크기만큼만 차지하게 해서 시간 옆으로 바짝 붙임.
+# 새로고침 버튼은 title 속성(help 파라미터로 생성됨 - Streamlit 버전과 무관하게 항상 존재하는
+# 표준 HTML 속성)을 직접 타겟팅해서 큰 음수 margin-left로 시간 텍스트 쪽으로 당겨옴.
+# (이전에 쓰던 .st-key-* 방식의 컬럼 flex 조정은 이 배포 환경에서 반영되지 않아 이 방식으로 교체함)
 st.markdown(
     """
     <style>
@@ -136,14 +138,9 @@ st.markdown(
         margin-top: -55px;
         margin-bottom: -8px;
     }
-    .st-key-time_row [data-testid="stHorizontalBlock"] {
-        gap: 0px !important;
-    }
-    .st-key-time_row [data-testid="stColumn"]:last-child {
-        flex: 0 0 auto !important;
-        width: auto !important;
-        min-width: 0 !important;
-        margin-left: -12px !important;
+    button[title="새로고침 (기사/요약 다시 받아오기)"] {
+        margin-left: -300px !important;
+        position: relative !important;
     }
     </style>
     """,
