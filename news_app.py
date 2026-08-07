@@ -105,7 +105,7 @@ with st.container(key="header_row"):
 
     with time_container_col:
         with st.container(key="time_row"):
-            time_col, refresh_col = st.columns([1, 1])
+            time_col, refresh_col = st.columns([10, 1])
             with time_col:
                 st.markdown(
                     f'<div style="font-size:30px; font-weight:700; line-height:1.3; white-space:nowrap;">🕐 {current_time_str}</div>',
@@ -143,13 +143,13 @@ st.markdown(
         padding: 0 !important;
         box-shadow: none !important;
         color: #111 !important;
-        font-size: 56px !important;
+        font-size: 112px !important;
         font-weight: 700 !important;
         line-height: 1 !important;
-        width: 60px !important;
-        height: 60px !important;
-        min-width: 60px !important;
-        min-height: 60px !important;
+        width: 120px !important;
+        height: 120px !important;
+        min-width: 120px !important;
+        min-height: 120px !important;
         overflow: visible !important;
         display: flex !important;
         align-items: center !important;
