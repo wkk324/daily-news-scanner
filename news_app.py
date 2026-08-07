@@ -84,15 +84,18 @@ def build_mini_calendar_html(year: int, month: int, today_day: int, cell_w: int 
                 continue
             is_today = day == today_day
             if is_today:
-                style = "background:#4a90d9; color:white;"
-            elif i == 0:
-                style = "color:#e74c3c;"
-            elif i == 6:
-                style = "color:#3b82f6;"
+                cell_style = "padding:2px; background:#4a90d9;"
+                span_style = "color:white;"
             else:
-                style = ""
+                cell_style = "padding:2px;"
+                if i == 0:
+                    span_style = "color:#e74c3c;"
+                elif i == 6:
+                    span_style = "color:#3b82f6;"
+                else:
+                    span_style = ""
             rows.append(
-                f'<td style="padding:2px;"><span style="{style} display:inline-block; '
+                f'<td style="{cell_style}"><span style="{span_style} display:inline-block; '
                 f'width:{cell_w}px; height:{cell_h}px; line-height:{cell_h}px;">{day}</span></td>'
             )
         rows.append("</tr>")
@@ -378,9 +381,11 @@ if st.session_state.keyword:
         cards_html = ""
         for item in visible_items:
             meta = " | ".join(filter(None, [item["source"], item["pub_date"]]))
+            summary = fetch_summary(item["link"]) or item["desc"]
 
             title_esc = html.escape(item["title"])
             meta_esc = html.escape(meta)
+            summary_esc = html.escape(summary) if summary else ""
 
             cards_html += f"""
 <div style="border:1px solid #e0e0e0; border-radius:6px; padding:6px 12px; margin-bottom:4px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
@@ -389,6 +394,7 @@ if st.session_state.keyword:
         {title_esc}
     </a>
     <span style="font-size:11px; color:#888; white-space:nowrap;">{meta_esc}</span>
+    {f'<span style="font-size:12px; color:#666; margin-left:auto; text-align:right;">📝 {summary_esc}</span>' if summary_esc else ''}
 </div>
 """
         st.markdown(cards_html, unsafe_allow_html=True)
