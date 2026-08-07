@@ -139,20 +139,27 @@ with col_date:
         unsafe_allow_html=True,
     )
 
+@st.cache_data(ttl=600, show_spinner=False)  # 10분 캐시: 리런/버튼클릭마다 재호출하지 않음 (API 일일 한도 보호)
+def fetch_weather():
+    """서울 현재 날씨 + 시간대별 예보를 가져온다."""
+    weather_url = (
+        "https://api.open-meteo.com/v1/forecast"
+        "?latitude=37.5665&longitude=126.9780"
+        "&current=temperature_2m,weather_code"
+        "&hourly=temperature_2m,weather_code,precipitation_probability"
+        "&timezone=Asia/Seoul&forecast_days=1"
+    )
+    weather_response = requests.get(weather_url, timeout=10)
+    weather_res = weather_response.json()
+    if "current" not in weather_res:
+        # API가 200을 줬지만 기대한 형식이 아님 - 실제 응답을 그대로 보여줘서 원인 파악
+        raise ValueError(f"API 응답 이상 (status={weather_response.status_code}): {weather_res}")
+    return weather_res
+
+
 with col_weather:
     try:
-        weather_url = (
-            "https://api.open-meteo.com/v1/forecast"
-            "?latitude=37.5665&longitude=126.9780"
-            "&current=temperature_2m,weather_code"
-            "&hourly=temperature_2m,weather_code,precipitation_probability"
-            "&timezone=Asia/Seoul&forecast_days=1"
-        )
-        weather_response = requests.get(weather_url, timeout=10)
-        weather_res = weather_response.json()
-        if "current" not in weather_res:
-            # API가 200을 줬지만 기대한 형식이 아님 - 실제 응답을 그대로 보여줘서 원인 파악
-            raise ValueError(f"API 응답 이상 (status={weather_response.status_code}): {weather_res}")
+        weather_res = fetch_weather()
         current_temp = weather_res["current"]["temperature_2m"]
         current_code = weather_res["current"]["weather_code"]
 
