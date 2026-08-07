@@ -18,13 +18,13 @@ WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 now = datetime.now()
 current_time_str = now.strftime("%Y년 %m월 %d일") + f" ({WEEKDAY_KR[now.weekday()]}) " + now.strftime("%H:%M:%S")
 
-# 세션 상태 (선택된 카테고리)
-if "keyword" not in st.session_state:
-    st.session_state.keyword = ""
-if "label" not in st.session_state:
-    st.session_state.label = ""
-
 ALL_QUERY = "__ALL__"  # '전체' 카테고리를 나타내는 특수 값 (검색어 없이 전체 헤드라인)
+
+# 세션 상태 (선택된 카테고리) - 처음 접속 시 기본값을 '전체'로 설정해서 바로 뉴스가 보이게 함
+if "keyword" not in st.session_state:
+    st.session_state.keyword = ALL_QUERY
+if "label" not in st.session_state:
+    st.session_state.label = "전체"
 
 # 카테고리 라벨: 실제 검색에 쓸 키워드 (일반적인 포털 뉴스 분류 기준)
 CATEGORIES = {
