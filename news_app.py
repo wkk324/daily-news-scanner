@@ -14,10 +14,31 @@ from urllib.parse import quote
 st.set_page_config(page_title="나만의 뉴스 탐색기", layout="wide")
 st.title("📰 오늘의 뉴스 탐색기")
 
-# 2. 날짜/날씨 정보
+# 2. 날짜/날씨/카테고리 정보
 WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 now = datetime.now()
 current_time_str = now.strftime("%Y년 %m월 %d일") + f" ({WEEKDAY_KR[now.weekday()]}) " + now.strftime("%H:%M:%S")
+
+# 세션 상태 (선택된 카테고리)
+if "keyword" not in st.session_state:
+    st.session_state.keyword = ""
+if "label" not in st.session_state:
+    st.session_state.label = ""
+
+ALL_QUERY = "__ALL__"  # '전체' 카테고리를 나타내는 특수 값 (검색어 없이 전체 헤드라인)
+
+# 카테고리 라벨: 실제 검색에 쓸 키워드 (일반적인 포털 뉴스 분류 기준)
+CATEGORIES = {
+    "전체": ALL_QUERY,
+    "정치": "정치",
+    "경제": "경제",
+    "사회": "사회",
+    "생활/문화": "문화",
+    "IT/과학": "IT",
+    "세계": "국제",
+    "스포츠": "스포츠",
+    "연예": "연예",
+}
 
 
 def weather_emoji(code: int) -> str:
@@ -125,7 +146,7 @@ st.markdown(
 )
 
 
-col_date, col_weather = st.columns([1, 1.3])
+col_date, col_weather, col_category = st.columns([1, 1.1, 2.2])
 
 CALENDAR_WRAP_HEIGHT = 282  # '📅 달력' 제목 줄이 추가된 만큼 줄여서 날씨란과 바닥을 맞춤
 
@@ -175,41 +196,32 @@ with col_weather:
 """
         st.markdown(
             f'<div style="border:1px solid #eee; border-radius:6px; '
-            f'width:260px; max-height:220px; overflow-y:auto;">{hour_rows}</div>',
+            f'width:240px; max-height:220px; overflow-y:auto;">{hour_rows}</div>',
             unsafe_allow_html=True,
         )
     except Exception:
         st.markdown("🌡️ **날씨 정보를 불러오지 못했습니다.**")
 
+with col_category:
+    st.markdown("📌 **카테고리 선택**")
+
+    cat_items = list(CATEGORIES.items())
+    for row_start in range(0, len(cat_items), 5):  # 5개씩 2줄로 배치
+        row = cat_items[row_start:row_start + 5]
+        cols = st.columns(5)
+        for col, (label, query) in zip(cols, row):
+            if col.button(label, use_container_width=True):
+                st.session_state.keyword = query
+                st.session_state.label = label
+
+    manual_keyword = st.text_input("직접 키워드 입력:", value=st.session_state.keyword)
+    if manual_keyword and manual_keyword != st.session_state.keyword:
+        st.session_state.keyword = manual_keyword
+        st.session_state.label = manual_keyword  # 직접 입력한 경우 라벨=검색어
+
 st.write("---")
 
-
-
-
-
-# 3. 세션 상태 및 검색 기능
-if "keyword" not in st.session_state:
-    st.session_state.keyword = ""
-if "label" not in st.session_state:
-    st.session_state.label = ""
-
-ALL_QUERY = "__ALL__"  # '전체' 카테고리를 나타내는 특수 값 (검색어 없이 전체 헤드라인)
-
-# 카테고리 라벨: 실제 검색에 쓸 키워드 (일반적인 포털 뉴스 분류 기준)
-CATEGORIES = {
-    "전체": ALL_QUERY,
-    "정치": "정치",
-    "경제": "경제",
-    "사회": "사회",
-    "생활/문화": "문화",
-    "IT/과학": "IT",
-    "세계": "국제",
-    "스포츠": "스포츠",
-    "연예": "연예",
-}
-
-st.caption("📌 카테고리 선택")
-
+# 3. 구글 뉴스 RSS 연동에 필요한 함수 정의
 cat_items = list(CATEGORIES.items())
 for row_start in range(0, len(cat_items), 5):  # 5개씩 2줄로 배치
     row = cat_items[row_start:row_start + 5]
