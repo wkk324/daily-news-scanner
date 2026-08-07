@@ -41,17 +41,17 @@ def weather_emoji(code: int) -> str:
     return "🌡️"
 
 
-def build_mini_calendar_html(year: int, month: int, today_day: int) -> str:
+def build_mini_calendar_html(year: int, month: int, today_day: int, cell_w: int = 30, cell_h: int = 27) -> str:
     """작은 한 달 달력 HTML을 만든다. 오늘 날짜는 동그라미로 강조."""
     cal = calendar.Calendar(firstweekday=6)  # 일요일부터 시작
     weeks = cal.monthdayscalendar(year, month)
     headers = ["일", "월", "화", "수", "목", "금", "토"]
 
-    rows = ['<table style="border-collapse:collapse; font-size:11px; width:170px; table-layout:fixed; text-align:center;">']
+    rows = ['<table style="border-collapse:collapse; font-size:13px; table-layout:fixed; text-align:center;">']
     rows.append("<tr>")
     for i, h in enumerate(headers):
         color = "#e74c3c" if i == 0 else ("#3b82f6" if i == 6 else "#666")
-        rows.append(f'<th style="padding:2px; color:{color}; font-weight:500;">{h}</th>')
+        rows.append(f'<th style="padding:3px; color:{color}; font-weight:600;">{h}</th>')
     rows.append("</tr>")
 
     for week in weeks:
@@ -70,8 +70,8 @@ def build_mini_calendar_html(year: int, month: int, today_day: int) -> str:
             else:
                 style = ""
             rows.append(
-                f'<td style="padding:1px;"><span style="{style} display:inline-block; '
-                f'width:18px; height:16px; line-height:16px;">{day}</span></td>'
+                f'<td style="padding:2px;"><span style="{style} display:inline-block; '
+                f'width:{cell_w}px; height:{cell_h}px; line-height:{cell_h}px;">{day}</span></td>'
             )
         rows.append("</tr>")
     rows.append("</table>")
@@ -81,7 +81,16 @@ def build_mini_calendar_html(year: int, month: int, today_day: int) -> str:
 col_date, col_weather = st.columns([1, 1.3])
 
 with col_date:
-    st.markdown(f"🕐 **현재시간:** {current_time_str}")
+    time_col, refresh_col = st.columns([6, 1])
+    with time_col:
+        st.markdown(
+            f'<div style="font-size:20px; font-weight:700; line-height:1.3;">🕐 {current_time_str}</div>',
+            unsafe_allow_html=True,
+        )
+    with refresh_col:
+        if st.button("🔄", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
+            st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
+            st.rerun()
     st.markdown(build_mini_calendar_html(now.year, now.month, now.day), unsafe_allow_html=True)
 
 with col_weather:
@@ -152,18 +161,12 @@ CATEGORIES = {
     "연예": "연예",
 }
 
-cap_col, refresh_col = st.columns([4, 1])
-with cap_col:
-    st.caption("📌 카테고리 선택")
-with refresh_col:
-    if st.button("🔄 새로고침", use_container_width=True):
-        st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
-        st.rerun()
+st.caption("📌 카테고리 선택")
 
 cat_items = list(CATEGORIES.items())
-for row_start in range(0, len(cat_items), 3):  # 3개씩 3줄로 배치
-    row = cat_items[row_start:row_start + 3]
-    cols = st.columns(3)
+for row_start in range(0, len(cat_items), 5):  # 5개씩 2줄로 배치
+    row = cat_items[row_start:row_start + 5]
+    cols = st.columns(5)
     for col, (label, query) in zip(cols, row):
         if col.button(label, use_container_width=True):
             st.session_state.keyword = query
