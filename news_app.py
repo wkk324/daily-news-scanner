@@ -206,7 +206,16 @@ with outer_left:
                 st.session_state.keyword = query
                 st.session_state.label = label
 
-    manual_keyword = st.text_input("직접 키워드 입력:", value=st.session_state.label)
+    label_col, input_col = st.columns([1, 4])
+    with label_col:
+        st.markdown(
+            '<div style="display:flex; align-items:center; height:38px; white-space:nowrap;">직접 키워드 입력:</div>',
+            unsafe_allow_html=True,
+        )
+    with input_col:
+        manual_keyword = st.text_input(
+            "직접 키워드 입력:", value=st.session_state.label, label_visibility="collapsed"
+        )
     if manual_keyword and manual_keyword != st.session_state.label:
         st.session_state.keyword = manual_keyword
         st.session_state.label = manual_keyword  # 직접 입력한 경우 라벨=검색어
