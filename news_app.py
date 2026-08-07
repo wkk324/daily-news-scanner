@@ -18,7 +18,8 @@ WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 now = datetime.now()
 current_time_str = now.strftime("%Y년 %m월 %d일") + f" ({WEEKDAY_KR[now.weekday()]}) " + now.strftime("%H:%M:%S")
 
-ALL_QUERY = "__ALL__"  # '전체' 카테고리를 나타내는 특수 값 (검색어 없이 전체 헤드라인)
+ALL_QUERY = "__ALL__"  # '전체' 카테고리를 나타내는 특수 값 (모든 카테고리를 합쳐서 최신순 정렬)
+MAIN_QUERY = "__MAIN__"  # '주요' 카테고리를 나타내는 특수 값 (구글이 선정한 톱헤드라인 피드)
 
 # 세션 상태 (선택된 카테고리) - 처음 접속 시 기본값을 '전체'로 설정해서 바로 뉴스가 보이게 함
 if "keyword" not in st.session_state:
@@ -31,6 +32,7 @@ if "display_count" not in st.session_state:
 # 카테고리 라벨: 실제 검색에 쓸 키워드 (일반적인 포털 뉴스 분류 기준)
 CATEGORIES = {
     "전체": ALL_QUERY,
+    "주요": MAIN_QUERY,
     "정치": "정치",
     "경제": "경제",
     "사회": "사회",
@@ -338,8 +340,8 @@ def fetch_summary(link: str) -> str:
 def fetch_google_news(keyword: str, max_items: int = 60):
     """구글 뉴스 RSS에서 키워드 관련 뉴스를 가져온다. (넉넉히 받아둔 뒤 화면에는 일부만 보여주고,
     '더보기' 클릭 시 이미 받아온 목록에서 추가로 꺼내 쓴다 - 재요청 없이 빠름)
-    keyword가 ALL_QUERY이면 특정 주제 검색 없이 전체 헤드라인 피드를 사용한다."""
-    if keyword == ALL_QUERY:
+    keyword가 MAIN_QUERY이면 특정 주제 검색 없이 구글이 선정한 톱헤드라인 피드를 사용한다."""
+    if keyword == MAIN_QUERY:
         url = "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
     else:
         url = f"https://news.google.com/rss/search?q={quote(keyword)}&hl=ko&gl=KR&ceid=KR:ko"
@@ -411,7 +413,12 @@ def fetch_all_categories_news(max_items: int = 60):
 
 # 4. 구글 뉴스 RSS 연동
 if st.session_state.keyword:
-    header_text = "전체 최신 뉴스" if st.session_state.keyword == ALL_QUERY else f"'{st.session_state.label}' 관련 최신 뉴스"
+    if st.session_state.keyword == ALL_QUERY:
+        header_text = "전체 최신 뉴스"
+    elif st.session_state.keyword == MAIN_QUERY:
+        header_text = "주요 뉴스"
+    else:
+        header_text = f"'{st.session_state.label}' 관련 최신 뉴스"
     st.subheader(f"🔍 {header_text}")
 
     try:
