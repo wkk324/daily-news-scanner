@@ -148,7 +148,11 @@ with col_weather:
             "&hourly=temperature_2m,weather_code,precipitation_probability"
             "&timezone=Asia/Seoul&forecast_days=1"
         )
-        weather_res = requests.get(weather_url, timeout=10).json()
+        weather_response = requests.get(weather_url, timeout=10)
+        weather_res = weather_response.json()
+        if "current" not in weather_res:
+            # API가 200을 줬지만 기대한 형식이 아님 - 실제 응답을 그대로 보여줘서 원인 파악
+            raise ValueError(f"API 응답 이상 (status={weather_response.status_code}): {weather_res}")
         current_temp = weather_res["current"]["temperature_2m"]
         current_code = weather_res["current"]["weather_code"]
 
