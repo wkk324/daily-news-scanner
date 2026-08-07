@@ -174,14 +174,14 @@ with col_date:
     )
 
 @st.cache_data(ttl=600, show_spinner=False)  # 10분 캐시: 리런/버튼클릭마다 재호출하지 않음 (API 일일 한도 보호)
-def fetch_weather():
-    """서울 현재 날씨 + 시간대별 예보를 가져온다."""
+def fetch_weather(lat: float, lon: float):
+    """지정한 좌표의 현재 날씨 + 시간대별 예보를 가져온다."""
     weather_url = (
         "https://api.open-meteo.com/v1/forecast"
-        "?latitude=37.5665&longitude=126.9780"
+        f"?latitude={lat}&longitude={lon}"
         "&current=temperature_2m,weather_code"
         "&hourly=temperature_2m,weather_code,precipitation_probability"
-        "&timezone=Asia/Seoul&forecast_days=1"
+        "&timezone=auto&forecast_days=1"
     )
     weather_response = requests.get(weather_url, timeout=10)
     weather_res = weather_response.json()
@@ -191,14 +191,70 @@ def fetch_weather():
     return weather_res
 
 
+@st.cache_data(ttl=3600, show_spinner=False)  # 1시간 캐시 - 같은 좌표를 반복 조회하지 않음
+def reverse_geocode(lat: float, lon: float) -> str:
+    """좌표를 '시/도 구 동' 형태의 사람이 읽을 수 있는 지명으로 변환한다 (OpenStreetMap Nominatim, 무료).
+    실패하면 '내 위치'를 그대로 반환."""
+    try:
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {"format": "json", "lat": lat, "lon": lon, "accept-language": "ko", "zoom": 18}
+        # Nominatim은 User-Agent 헤더가 없으면 요청을 거부하므로 반드시 넣어야 함
+        headers = {"User-Agent": "news-explorer-app/1.0"}
+        res = requests.get(url, params=params, headers=headers, timeout=5)
+        res.raise_for_status()
+        address = res.json().get("address", {})
+
+        city = address.get("city") or address.get("province") or ""
+        # 국내 행정구역상 '구'는 city_district/borough, '동'은 neighbourhood/suburb/quarter에 담기는 경우가 많음
+        gu = address.get("borough") or address.get("city_district") or ""
+        dong = address.get("neighbourhood") or address.get("suburb") or address.get("quarter") or ""
+
+        parts = [p for p in (city, gu, dong) if p]
+        return " ".join(parts) if parts else "내 위치"
+    except Exception:
+        return "내 위치"
+
+
+# 브라우저 위치 정보 요청: lat/lon이 아직 URL에 없으면, 위치 권한을 요청하는 보이지 않는
+# JS 컴포넌트를 실행한다. 사용자가 허용하면 좌표를 URL에 담아 페이지를 새로고침한다.
+# 거부하거나 실패하면 기본값(서울)을 계속 사용한다.
+if "lat" in st.query_params and "lon" in st.query_params:
+    weather_lat = float(st.query_params["lat"])
+    weather_lon = float(st.query_params["lon"])
+    weather_location_label = reverse_geocode(weather_lat, weather_lon)  # 예: "인천 남동구 만수동"
+else:
+    weather_lat, weather_lon = 37.5665, 126.9780  # 기본값: 서울
+    weather_location_label = "서울"
+    st.components.v1.html(
+        """
+        <script>
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    const lat = pos.coords.latitude.toFixed(4);
+                    const lon = pos.coords.longitude.toFixed(4);
+                    const url = new URL(window.parent.location.href);
+                    url.searchParams.set('lat', lat);
+                    url.searchParams.set('lon', lon);
+                    window.parent.location.href = url.toString();
+                },
+                function(err) { /* 권한 거부/실패 시 아무것도 안 함 - 서울 날씨 유지 */ }
+            );
+        }
+        </script>
+        """,
+        height=0,
+    )
+
+
 with col_weather:
     try:
-        weather_res = fetch_weather()
+        weather_res = fetch_weather(weather_lat, weather_lon)
         current_temp = weather_res["current"]["temperature_2m"]
         current_code = weather_res["current"]["weather_code"]
 
         st.markdown(
-            f"{weather_emoji(current_code)} **현재 서울 기온:** {current_temp}℃"
+            f"{weather_emoji(current_code)} **현재 {weather_location_label} 기온:** {current_temp}℃"
         )
 
         # 시간대별 예보를 3시간 간격으로 위에서 아래로 나열
