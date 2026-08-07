@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 import requests
 import streamlit as st
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote
@@ -57,24 +58,31 @@ def fetch_google_news(keyword: str, max_items: int = 10):
     res = requests.get(url, headers=headers, timeout=10)
     res.raise_for_status()
 
-    # "xml" 파서는 lxml 패키지가 필요한데 Streamlit Cloud 기본 환경엔 없는 경우가 많아
-    # FeatureNotFound 에러가 남. 표준 라이브러리만으로 동작하는 html.parser 사용.
-    # (html.parser는 태그명을 전부 소문자로 바꿔서 파싱하므로 find()도 소문자로 맞춰야 함)
-    soup = BeautifulSoup(res.content, "html.parser")
-    items = soup.find_all("item")
+    # bs4의 html.parser는 <link>를 HTML의 self-closing 태그로 착각해서
+    # <link>URL</link> 안의 URL 텍스트를 놓쳐버리는 문제가 있었음(빈 링크 -> 자기 페이지로 되돌아감).
+    # RSS는 표준 XML이므로 파이썬 내장 xml.etree.ElementTree로 파싱하면 이 문제가 없고,
+    # lxml 같은 추가 패키지 설치도 필요 없음.
+    root = ET.fromstring(res.content)
+    items = root.findall(".//item")
 
     news_list = []
     for item in items[:max_items]:
-        title = item.find("title").text if item.find("title") else "제목 없음"
-        link = item.find("link").text.strip() if item.find("link") else "#"
-        pub_date = format_pubdate(item.find("pubdate").text) if item.find("pubdate") else ""
-        source = item.find("source").text if item.find("source") else ""
+        title_el = item.find("title")
+        link_el = item.find("link")
+        pubdate_el = item.find("pubDate")
+        source_el = item.find("source")
+        desc_el = item.find("description")
+
+        title = title_el.text if title_el is not None and title_el.text else "제목 없음"
+        link = link_el.text.strip() if link_el is not None and link_el.text else "#"
+        pub_date = format_pubdate(pubdate_el.text) if pubdate_el is not None and pubdate_el.text else ""
+        source = source_el.text if source_el is not None and source_el.text else ""
 
         # 구글 뉴스 RSS의 description은 보통 제목을 감싼 <a> 태그 하나뿐이라
         # 실질적인 '요약'이 되지 못하는 경우가 많음. 있는 경우에만 사용.
         desc_text = ""
-        if item.find("description"):
-            desc_soup = BeautifulSoup(item.find("description").text, "html.parser")
+        if desc_el is not None and desc_el.text:
+            desc_soup = BeautifulSoup(desc_el.text, "html.parser")
             # 제목과 중복되는 링크 텍스트는 제외하고 나머지 텍스트만 추출
             for a_tag in desc_soup.find_all("a"):
                 a_tag.decompose()
