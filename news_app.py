@@ -25,6 +25,8 @@ if "keyword" not in st.session_state:
     st.session_state.keyword = ALL_QUERY
 if "label" not in st.session_state:
     st.session_state.label = "전체"
+if "display_count" not in st.session_state:
+    st.session_state.display_count = 20  # 처음엔 20개만 보여주고, '더보기' 클릭 시 늘어남
 
 # 카테고리 라벨: 실제 검색에 쓸 키워드 (일반적인 포털 뉴스 분류 기준)
 CATEGORIES = {
@@ -205,6 +207,7 @@ with outer_left:
             if col.button(label, use_container_width=True):
                 st.session_state.keyword = query
                 st.session_state.label = label
+                st.session_state.display_count = 20  # 카테고리를 바꾸면 노출 개수도 처음(20개)으로 리셋
 
     st.markdown('<div style="height:64px;"></div>', unsafe_allow_html=True)  # 달력 아래쪽 높이와 맞추기 위한 여백
 
@@ -221,6 +224,7 @@ with outer_left:
     if manual_keyword and manual_keyword != st.session_state.label:
         st.session_state.keyword = manual_keyword
         st.session_state.label = manual_keyword  # 직접 입력한 경우 라벨=검색어
+        st.session_state.display_count = 20  # 키워드가 바뀌면 노출 개수도 처음(20개)으로 리셋
 
 st.write("---")
 
@@ -288,8 +292,9 @@ def fetch_summary(link: str) -> str:
 
 
 @st.cache_data(ttl=300)  # 5분 캐시: 같은 키워드로 반복 검색해도 매번 요청하지 않음
-def fetch_google_news(keyword: str, max_items: int = 10):
-    """구글 뉴스 RSS에서 키워드 관련 뉴스를 가져온다.
+def fetch_google_news(keyword: str, max_items: int = 60):
+    """구글 뉴스 RSS에서 키워드 관련 뉴스를 가져온다. (넉넉히 받아둔 뒤 화면에는 일부만 보여주고,
+    '더보기' 클릭 시 이미 받아온 목록에서 추가로 꺼내 쓴다 - 재요청 없이 빠름)
     keyword가 ALL_QUERY이면 특정 주제 검색 없이 전체 헤드라인 피드를 사용한다."""
     if keyword == ALL_QUERY:
         url = "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
@@ -356,8 +361,9 @@ if st.session_state.keyword:
         st.error(f"뉴스를 불러오는 중 오류가 발생했습니다: {e}")
 
     if news_items:
+        visible_items = news_items[: st.session_state.display_count]
         cards_html = ""
-        for item in news_items:
+        for item in visible_items:
             summary = fetch_summary(item["link"]) or item["desc"]
             meta = " | ".join(filter(None, [item["source"], item["pub_date"]]))
 
@@ -376,6 +382,13 @@ if st.session_state.keyword:
 </div>
 """
         st.markdown(cards_html, unsafe_allow_html=True)
+
+        # 아직 안 보여준 기사가 남아있으면 '더보기' 버튼 표시
+        if len(news_items) > st.session_state.display_count:
+            remaining = len(news_items) - st.session_state.display_count
+            if st.button(f"더보기 ({remaining}개 더 있음)", use_container_width=True):
+                st.session_state.display_count += 20
+                st.rerun()
     else:
         st.warning("검색된 뉴스가 없습니다. 다른 키워드를 입력해 보세요.")
 else:
