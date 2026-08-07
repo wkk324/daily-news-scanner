@@ -392,13 +392,33 @@ def fetch_google_news(keyword: str, max_items: int = 60):
     return news_list
 
 
+@st.cache_data(ttl=300)  # 5분 캐시
+def fetch_all_categories_news(max_items: int = 60):
+    """'전체' 카테고리용: 정치/경제/사회/문화/IT/국제/스포츠/연예를 전부 검색해서
+    하나로 합친 뒤 중복(같은 링크)을 제거하고 최신순으로 정렬한다."""
+    all_items = []
+    seen_links = set()
+    for label, query in CATEGORIES.items():
+        if query == ALL_QUERY:
+            continue  # '전체' 자기 자신은 건너뜀
+        for item in fetch_google_news(query, max_items=30):
+            if item["link"] not in seen_links:
+                seen_links.add(item["link"])
+                all_items.append(item)
+    all_items.sort(key=lambda x: x["pub_date"], reverse=True)
+    return all_items[:max_items]
+
+
 # 4. 구글 뉴스 RSS 연동
 if st.session_state.keyword:
     header_text = "전체 최신 뉴스" if st.session_state.keyword == ALL_QUERY else f"'{st.session_state.label}' 관련 최신 뉴스"
     st.subheader(f"🔍 {header_text}")
 
     try:
-        news_items = fetch_google_news(st.session_state.keyword)
+        if st.session_state.keyword == ALL_QUERY:
+            news_items = fetch_all_categories_news()
+        else:
+            news_items = fetch_google_news(st.session_state.keyword)
     except requests.exceptions.RequestException as e:
         news_items = []
         st.error(f"뉴스를 불러오는 중 오류가 발생했습니다: {e}")
