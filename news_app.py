@@ -102,7 +102,7 @@ st.title("📰 오늘의 뉴스 탐색기")
 
 # 아래 컨텐츠 행(카테고리/달력/날씨)과 동일한 비율의 컬럼을 시간 행에도 그대로 사용해서,
 # 시간+새로고침 버튼이 정확히 '달력' 컬럼 바로 위에 오도록 맞춤 (같은 비율 -> 같은 폭/위치).
-LAYOUT_RATIOS = [1.6, 1, 1]  # [카테고리, 달력, 날씨]
+LAYOUT_RATIOS = [1.3, 1, 1]  # [카테고리, 달력, 날씨] - 카테고리가 화면 중간을 넘지 않도록 여유를 둠
 
 _, time_slot_col, _ = st.columns(LAYOUT_RATIOS)
 with time_slot_col:
@@ -159,51 +159,47 @@ st.markdown(
 )
 
 
-outer_left, outer_right = st.columns([1.6, 1])
+outer_left, col_date, col_weather = st.columns(LAYOUT_RATIOS)
 
 CALENDAR_WRAP_HEIGHT = 282  # '📅 달력' 제목 줄이 추가된 만큼 줄여서 날씨란과 바닥을 맞춤
 
-with outer_right:
-    with st.container(key="cal_weather_row"):
-        col_date, col_weather = st.columns([1, 1])
+with col_date:
+    st.markdown("📅 **달력**")
+    st.markdown(
+        f'<div style="height:{CALENDAR_WRAP_HEIGHT}px;">'
+        + build_mini_calendar_html(now.year, now.month, now.day, cell_w=36)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
 
-        with col_date:
-            st.markdown("📅 **달력**")
-            st.markdown(
-                f'<div style="height:{CALENDAR_WRAP_HEIGHT}px;">'
-                + build_mini_calendar_html(now.year, now.month, now.day, cell_w=36)
-                + "</div>",
-                unsafe_allow_html=True,
-            )
+with col_weather:
+    try:
+        weather_url = (
+            "https://api.open-meteo.com/v1/forecast"
+            "?latitude=37.5665&longitude=126.9780"
+            "&current=temperature_2m,weather_code"
+            "&hourly=temperature_2m,weather_code,precipitation_probability"
+            "&timezone=Asia/Seoul&forecast_days=1"
+        )
+        weather_res = requests.get(weather_url, timeout=5).json()
+        current_temp = weather_res["current"]["temperature_2m"]
+        current_code = weather_res["current"]["weather_code"]
 
-        with col_weather:
-            try:
-                weather_url = (
-                    "https://api.open-meteo.com/v1/forecast"
-                    "?latitude=37.5665&longitude=126.9780"
-                    "&current=temperature_2m,weather_code"
-                    "&hourly=temperature_2m,weather_code,precipitation_probability"
-                    "&timezone=Asia/Seoul&forecast_days=1"
-                )
-                weather_res = requests.get(weather_url, timeout=5).json()
-                current_temp = weather_res["current"]["temperature_2m"]
-                current_code = weather_res["current"]["weather_code"]
+        st.markdown(
+            f"{weather_emoji(current_code)} **현재 서울 기온:** {current_temp}℃"
+        )
 
-                st.markdown(
-                    f"{weather_emoji(current_code)} **현재 서울 기온:** {current_temp}℃"
-                )
+        # 시간대별 예보를 3시간 간격으로 위에서 아래로 나열
+        hourly = weather_res["hourly"]
+        times = hourly["time"]  # "2026-08-07T00:00" 형식
+        temps = hourly["temperature_2m"]
+        codes = hourly["weather_code"]
+        pops = hourly["precipitation_probability"]
 
-                # 시간대별 예보를 3시간 간격으로 위에서 아래로 나열
-                hourly = weather_res["hourly"]
-                times = hourly["time"]  # "2026-08-07T00:00" 형식
-                temps = hourly["temperature_2m"]
-                codes = hourly["weather_code"]
-                pops = hourly["precipitation_probability"]
-
-                hour_rows = ""
-                for i in range(0, len(times), 3):
-                    hour_only = times[i].split("T")[1][:2] + "시"
-                    hour_rows += f"""
+        hour_rows = ""
+        for i in range(0, len(times), 3):
+            hour_only = times[i].split("T")[1][:2] + "시"
+            hour_rows += f"""
 <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 8px; border-bottom:1px solid #f0f0f0; font-size:12px;">
     <span style="color:#666; width:32px;">{hour_only}</span>
     <span style="font-size:15px;">{weather_emoji(codes[i])}</span>
@@ -211,32 +207,13 @@ with outer_right:
     <span style="color:#4a90d9; width:48px; text-align:right;">💧{pops[i]}%</span>
 </div>
 """
-                st.markdown(
-                    f'<div style="border:1px solid #eee; border-radius:6px; '
-                    f'width:360px; max-height:220px; overflow-y:auto;">{hour_rows}</div>',
-                    unsafe_allow_html=True,
-                )
-            except Exception:
-                st.markdown("🌡️ **날씨 정보를 불러오지 못했습니다.**")
-
-# 달력+날씨를 오른쪽 끝에 몰아서 배치: 내용물 크기만큼만(shrink-to-fit) 차지하고
-# 오른쪽으로 정렬해서 outer_right 컬럼 안에서도 오른쪽 끝에 붙게 함.
-st.markdown(
-    """
-    <style>
-    .st-key-cal_weather_row [data-testid="stHorizontalBlock"] {
-        gap: 16px !important;
-        justify-content: flex-end !important;
-    }
-    .st-key-cal_weather_row [data-testid="stColumn"] {
-        flex: 0 0 auto !important;
-        width: auto !important;
-        min-width: 0 !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+        st.markdown(
+            f'<div style="border:1px solid #eee; border-radius:6px; '
+            f'width:100%; max-height:220px; overflow-y:auto;">{hour_rows}</div>',
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        st.markdown("🌡️ **날씨 정보를 불러오지 못했습니다.**")
 
 with outer_left:
     st.markdown("📌 **카테고리 선택**")
