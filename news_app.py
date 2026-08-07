@@ -78,23 +78,34 @@ def build_mini_calendar_html(year: int, month: int, today_day: int, cell_w: int 
     return "".join(rows)
 
 
-time_col, refresh_col, _spacer = st.columns([5, 1, 6])
-with time_col:
-    st.markdown(
-        f'<div style="font-size:30px; font-weight:700; line-height:1.3;">🕐 {current_time_str}</div>',
-        unsafe_allow_html=True,
-    )
-with refresh_col:
-    if st.button("🔄", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
-        st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
-        st.rerun()
+with st.container(key="time_row"):
+    time_col, refresh_col = st.columns([1, 1])
+    with time_col:
+        st.markdown(
+            f'<div style="font-size:30px; font-weight:700; line-height:1.3; white-space:nowrap;">🕐 {current_time_str}</div>',
+            unsafe_allow_html=True,
+        )
+    with refresh_col:
+        if st.button("🔄", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
+            st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
+            st.rerun()
 
-# 새로고침 버튼을 브라우저 새로고침 아이콘처럼 - 테두리/배경 없이 검은 화살표만, 크게
+# 새로고침 버튼을 시간 텍스트 바로 옆에 붙임: 컬럼이 각자 비율만큼 넓게 차지하는 대신
+# 내용물 크기만큼만(shrink-to-fit) 차지하도록 강제해서 둘 사이 빈 여백을 없앰.
+# 버튼은 브라우저 새로고침 아이콘처럼 - 테두리/배경 없이 검은 실루엣만, 크게.
 # filter:brightness(0)로 원래 색깔 이모지를 검은 실루엣으로 강제 변환 (특정 유니코드 화살표 문자가
 # 폰트에 따라 아예 안 보이는 문제를 피하기 위해, 확실히 렌더링되는 🔄 이모지를 사용)
 st.markdown(
     """
     <style>
+    .st-key-time_row [data-testid="stHorizontalBlock"] {
+        gap: 6px !important;
+    }
+    .st-key-time_row [data-testid="stColumn"] {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+    }
     .st-key-refresh_btn button {
         background: transparent !important;
         border: none !important;
@@ -116,7 +127,7 @@ st.markdown(
 
 col_date, col_weather = st.columns([1, 1.3])
 
-CALENDAR_WRAP_HEIGHT = 264  # 날씨란 전체 높이(현재기온 줄 + 시간대별 박스)와 맞춘 값
+CALENDAR_WRAP_HEIGHT = 310  # 날씨란 전체 높이(현재기온 줄 + 시간대별 박스)에 맞춰 더 늘림
 
 with col_date:
     st.markdown(
