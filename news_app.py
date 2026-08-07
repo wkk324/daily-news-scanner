@@ -92,9 +92,8 @@ with st.container(key="time_row"):
 
 # 새로고침 버튼을 시간 텍스트 바로 옆에 붙임: 컬럼이 각자 비율만큼 넓게 차지하는 대신
 # 내용물 크기만큼만(shrink-to-fit) 차지하도록 강제해서 둘 사이 빈 여백을 없앰.
-# 버튼은 브라우저 새로고침 아이콘처럼 - 테두리/배경 없이 검은 실루엣만, 크게.
-# filter:brightness(0)로 원래 색깔 이모지를 검은 실루엣으로 강제 변환 (특정 유니코드 화살표 문자가
-# 폰트에 따라 아예 안 보이는 문제를 피하기 위해, 확실히 렌더링되는 🔄 이모지를 사용)
+# 이모지/특수문자는 폰트에 따라 깨지거나(네모로 나옴) 안 보일 수 있어서,
+# 순수 CSS(::before/::after 가상요소)로 원형 화살표를 직접 그림 - 환경에 상관없이 항상 동일하게 보임.
 st.markdown(
     """
     <style>
@@ -111,14 +110,42 @@ st.markdown(
         border: none !important;
         padding: 0 !important;
         box-shadow: none !important;
-        font-size: 34px !important;
-        line-height: 1 !important;
-        filter: grayscale(100%) brightness(0);
-        opacity: 0.85;
-        margin-top: 4px;
+        width: 34px !important;
+        height: 34px !important;
+        min-width: 34px !important;
+        color: transparent !important;   /* 원래 이모지/텍스트는 완전히 숨김 */
+        font-size: 0 !important;
+        position: relative;
+        margin-top: 6px;
     }
-    .st-key-refresh_btn button:hover {
-        opacity: 1;
+    /* 원형 테두리(윗부분이 뚫려 있어 화살표가 도는 듯한 모양) */
+    .st-key-refresh_btn button::before {
+        content: "";
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        width: 24px;
+        height: 24px;
+        border: 3px solid #111;
+        border-top-color: transparent;
+        border-radius: 50%;
+    }
+    /* 화살촉(삼각형) */
+    .st-key-refresh_btn button::after {
+        content: "";
+        position: absolute;
+        top: 0px;
+        left: 19px;
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-bottom: 6px solid #111;
+        transform: rotate(35deg);
+    }
+    .st-key-refresh_btn button:hover::before,
+    .st-key-refresh_btn button:hover::after {
+        filter: brightness(2.2);
     }
     </style>
     """,
