@@ -12,7 +12,6 @@ from urllib.parse import quote
 
 # 1. 페이지 설정
 st.set_page_config(page_title="나만의 뉴스 탐색기", layout="wide")
-st.title("📰 오늘의 뉴스 탐색기")
 
 # 2. 날짜/날씨/카테고리 정보
 WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
@@ -99,26 +98,32 @@ def build_mini_calendar_html(year: int, month: int, today_day: int, cell_w: int 
     return "".join(rows)
 
 
-with st.container(key="time_row"):
-    time_col, refresh_col = st.columns([1, 1])
-    with time_col:
-        st.markdown(
-            f'<div style="font-size:30px; font-weight:700; line-height:1.3; white-space:nowrap;">🕐 {current_time_str}</div>',
-            unsafe_allow_html=True,
-        )
-    with refresh_col:
-        if st.button("↻", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
-            st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
-            st.rerun()
+title_col, time_container_col = st.columns([1, 1.4])
+with title_col:
+    st.title("📰 오늘의 뉴스 탐색기")
 
-# 새로고침 버튼을 시간 텍스트 바로 옆에 붙임: 컬럼이 각자 비율만큼 넓게 차지하는 대신
-# 내용물 크기만큼만(shrink-to-fit) 차지하도록 강제해서 둘 사이 빈 여백을 없앰.
-# 버튼은 처음 썼던 ↻ 문자로 되돌리고, 크기는 80%(24px)로 축소, 검은색 텍스트만 남김.
+with time_container_col:
+    with st.container(key="time_row"):
+        time_col, refresh_col = st.columns([1, 1])
+        with time_col:
+            st.markdown(
+                f'<div style="font-size:30px; font-weight:700; line-height:1.3; white-space:nowrap;">🕐 {current_time_str}</div>',
+                unsafe_allow_html=True,
+            )
+        with refresh_col:
+            if st.button("↻", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
+                st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
+                st.rerun()
+
+# 타이틀 오른쪽에 시간+새로고침 버튼을 배치: 전체 행을 오른쪽 정렬하고,
+# 시간/버튼 컬럼은 내용물 크기만큼만(shrink-to-fit) 차지하도록 해서 서로 붙게 함.
+# 새로고침 버튼은 처음 썼던 ↻ 문자를 사용하고, 크기를 2배(24px→48px)로 키움.
 st.markdown(
     """
     <style>
     .st-key-time_row [data-testid="stHorizontalBlock"] {
         gap: 6px !important;
+        justify-content: flex-end !important;
     }
     .st-key-time_row [data-testid="stColumn"] {
         flex: 0 0 auto !important;
@@ -131,10 +136,10 @@ st.markdown(
         padding: 0 !important;
         box-shadow: none !important;
         color: #111 !important;
-        font-size: 24px !important;
+        font-size: 48px !important;
         font-weight: 700 !important;
         line-height: 1 !important;
-        margin-top: 8px;
+        margin-top: 2px;
     }
     .st-key-refresh_btn button:hover {
         color: #555 !important;
