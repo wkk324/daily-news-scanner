@@ -243,7 +243,9 @@ else:
     weather_lat, weather_lon = 37.5665, 126.9780  # 기본값: 서울
     weather_location_label = "서울"
     _geocode_debug = {}
-    st.components.v1.html(
+    # st.components.v1.html은 최신 Streamlit에서 제거 대상이라 st.iframe으로 교체
+    # (HTML 문자열을 넘기면 자동으로 인식해서 iframe 안에 그대로 넣어줌)
+    st.iframe(
         """
         <script>
         if (navigator.geolocation) {
@@ -261,7 +263,7 @@ else:
         }
         </script>
         """,
-        height=0,
+        height=1,
     )
 
 
