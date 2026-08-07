@@ -107,7 +107,7 @@ st.title("📰 오늘의 뉴스 탐색기")
 
 # 아래 컨텐츠 행(카테고리/달력/날씨)과 동일한 비율의 컬럼을 시간 행에도 그대로 사용해서,
 # 시간+새로고침 버튼이 정확히 '달력' 컬럼 바로 위에 오도록 맞춤 (같은 비율 -> 같은 폭/위치).
-LAYOUT_RATIOS = [1.3, 1, 1]  # [카테고리, 달력, 날씨] - 카테고리가 화면 중간을 넘지 않도록 여유를 둠
+LAYOUT_RATIOS = [1.9, 1, 1]  # [카테고리, 달력, 날씨] - 카테고리 폭을 넓혀서 달력/시간이 더 오른쪽에서 시작하게 함
 
 _, time_slot_col, _ = st.columns(LAYOUT_RATIOS)
 with time_slot_col:
@@ -127,14 +127,22 @@ with time_slot_col:
                 st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
                 st.rerun()
 
-# time_row 컨테이너 자체에 직접 margin을 줘서 위치 조정 (컨테이너의 자기 클래스에 스타일을 주는 방식이라
-# 내부 구조와 상관없이 안정적으로 적용됨).
+# time_row 컨테이너 자체에 직접 margin을 줘서 위치 조정.
+# 내부 컬럼 gap도 줄이고 새로고침 버튼 컬럼을 내용물 크기만큼만 차지하게 해서 시간 옆으로 바짝 붙임.
 st.markdown(
     """
     <style>
     .st-key-time_row {
         margin-top: -55px;
         margin-bottom: -8px;
+    }
+    .st-key-time_row [data-testid="stHorizontalBlock"] {
+        gap: 4px !important;
+    }
+    .st-key-time_row [data-testid="stColumn"]:last-child {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
     }
     </style>
     """,
