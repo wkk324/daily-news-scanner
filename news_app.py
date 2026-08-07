@@ -6,7 +6,7 @@ import re
 import base64
 import html
 import calendar
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote
 
@@ -421,7 +421,14 @@ if st.session_state.keyword:
         header_text = "주요 뉴스"
     else:
         header_text = f"'{st.session_state.label}' 관련 최신 뉴스"
-    st.subheader(f"🔍 {header_text}")
+
+    header_col, period_col = st.columns([3, 1])
+    with header_col:
+        st.subheader(f"🔍 {header_text}")
+    with period_col:
+        PERIOD_OPTIONS = {"오늘": 1, "3일": 3, "1주일": 7, "전체": None}
+        period_label = st.selectbox("기간", list(PERIOD_OPTIONS.keys()), index=3, label_visibility="collapsed")
+        period_days = PERIOD_OPTIONS[period_label]
 
     try:
         if st.session_state.keyword == ALL_QUERY:
@@ -431,6 +438,12 @@ if st.session_state.keyword:
     except requests.exceptions.RequestException as e:
         news_items = []
         st.error(f"뉴스를 불러오는 중 오류가 발생했습니다: {e}")
+
+    # 기간 필터: pub_date가 "YYYY-MM-DD HH:MM" 형식이라 문자열 비교로도 날짜 범위를 걸러낼 수 있음.
+    # 날짜를 못 가져온 항목("")은 필터링 없이("전체") 볼 때만 포함.
+    if period_days is not None:
+        cutoff = (datetime.now() - timedelta(days=period_days)).strftime("%Y-%m-%d %H:%M")
+        news_items = [item for item in news_items if item["pub_date"] and item["pub_date"] >= cutoff]
 
     if news_items:
         visible_items = news_items[: st.session_state.display_count]
