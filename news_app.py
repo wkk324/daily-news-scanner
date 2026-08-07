@@ -86,14 +86,13 @@ with st.container(key="time_row"):
             unsafe_allow_html=True,
         )
     with refresh_col:
-        if st.button("🔄", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
+        if st.button("↻", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
             st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
             st.rerun()
 
 # 새로고침 버튼을 시간 텍스트 바로 옆에 붙임: 컬럼이 각자 비율만큼 넓게 차지하는 대신
 # 내용물 크기만큼만(shrink-to-fit) 차지하도록 강제해서 둘 사이 빈 여백을 없앰.
-# 이모지/특수문자는 폰트에 따라 깨지거나(네모로 나옴) 안 보일 수 있어서,
-# 순수 CSS(::before/::after 가상요소)로 원형 화살표를 직접 그림 - 환경에 상관없이 항상 동일하게 보임.
+# 버튼은 처음 썼던 ↻ 문자로 되돌리고, 크기는 80%(24px)로 축소, 검은색 텍스트만 남김.
 st.markdown(
     """
     <style>
@@ -110,53 +109,28 @@ st.markdown(
         border: none !important;
         padding: 0 !important;
         box-shadow: none !important;
-        width: 34px !important;
-        height: 34px !important;
-        min-width: 34px !important;
-        color: transparent !important;   /* 원래 이모지/텍스트는 완전히 숨김 */
-        font-size: 0 !important;
-        position: relative;
-        margin-top: 6px;
+        color: #111 !important;
+        font-size: 24px !important;
+        font-weight: 700 !important;
+        line-height: 1 !important;
+        margin-top: 8px;
     }
-    /* 원형 테두리(윗부분이 뚫려 있어 화살표가 도는 듯한 모양) */
-    .st-key-refresh_btn button::before {
-        content: "";
-        position: absolute;
-        top: 4px;
-        left: 4px;
-        width: 24px;
-        height: 24px;
-        border: 3px solid #111;
-        border-top-color: transparent;
-        border-radius: 50%;
-    }
-    /* 화살촉(삼각형) */
-    .st-key-refresh_btn button::after {
-        content: "";
-        position: absolute;
-        top: 0px;
-        left: 19px;
-        width: 0;
-        height: 0;
-        border-left: 5px solid transparent;
-        border-right: 5px solid transparent;
-        border-bottom: 6px solid #111;
-        transform: rotate(35deg);
-    }
-    .st-key-refresh_btn button:hover::before,
-    .st-key-refresh_btn button:hover::after {
-        filter: brightness(2.2);
+    .st-key-refresh_btn button:hover {
+        color: #555 !important;
+        background: transparent !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
+
 col_date, col_weather = st.columns([1, 1.3])
 
-CALENDAR_WRAP_HEIGHT = 310  # 날씨란 전체 높이(현재기온 줄 + 시간대별 박스)에 맞춰 더 늘림
+CALENDAR_WRAP_HEIGHT = 282  # '📅 달력' 제목 줄이 추가된 만큼 줄여서 날씨란과 바닥을 맞춤
 
 with col_date:
+    st.markdown("📅 **달력**")
     st.markdown(
         f'<div style="height:{CALENDAR_WRAP_HEIGHT}px;">'
         + build_mini_calendar_html(now.year, now.month, now.day, cell_w=36)
