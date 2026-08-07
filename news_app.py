@@ -107,9 +107,9 @@ st.title("📰 오늘의 뉴스 탐색기")
 
 # 아래 컨텐츠 행(카테고리/달력/날씨)과 동일한 비율의 컬럼을 시간 행에도 그대로 사용해서,
 # 시간+새로고침 버튼이 정확히 '달력' 컬럼 바로 위에 오도록 맞춤 (같은 비율 -> 같은 폭/위치).
-LAYOUT_RATIOS = [1.9, 1, 1]  # [카테고리, 달력, 날씨] - 카테고리 폭을 넓혀서 달력/시간이 더 오른쪽에서 시작하게 함
+LAYOUT_RATIOS = [39, 11, 25, 25]  # [카테고리(원래 폭), 빈 여백, 달력, 날씨] - 달력이 화면 중간(50%)부터 시작
 
-_, time_slot_col, _ = st.columns(LAYOUT_RATIOS)
+_, _, time_slot_col, _ = st.columns(LAYOUT_RATIOS)
 with time_slot_col:
     # 시간 텍스트와 새로고침 버튼을 나란히 배치.
     # 음수 margin-top으로 타이틀 줄 쪽으로 끌어올려서, 타이틀 밑부분과 이 줄의 밑부분이 같은 높이에 오도록 함.
@@ -150,7 +150,7 @@ st.markdown(
 )
 
 
-outer_left, col_date, col_weather = st.columns(LAYOUT_RATIOS)
+outer_left, _, col_date, col_weather = st.columns(LAYOUT_RATIOS)
 
 CALENDAR_WRAP_HEIGHT = 282  # '📅 달력' 제목 줄이 추가된 만큼 줄여서 날씨란과 바닥을 맞춤
 
