@@ -116,7 +116,7 @@ with time_slot_col:
     # 시간 텍스트와 새로고침 화살표를 하나의 flex 줄에 같이 넣어서 바로 옆에 붙게 함.
     # 새로고침은 실제 <a> 링크라 인라인 style만으로 크기/색이 항상 적용됨(2배 크기: 24px -> 48px).
     st.markdown(
-        f'''<div style="display:flex; align-items:center; gap:10px;">
+        f'''<div style="display:flex; align-items:center; gap:10px; margin-bottom:-8px;">
     <span style="font-size:30px; font-weight:700; line-height:1.3; white-space:nowrap;">🕐 {current_time_str}</span>
     <a href="?refresh=1" title="새로고침 (기사/요약 다시 받아오기)"
        style="text-decoration:none; color:#111; font-size:48px; font-weight:700; line-height:1;">↻</a>
@@ -175,7 +175,7 @@ with col_weather:
 """
         st.markdown(
             f'<div style="border:1px solid #eee; border-radius:6px; '
-            f'width:100%; max-height:220px; overflow-y:auto;">{hour_rows}</div>',
+            f'width:50%; max-height:220px; overflow-y:auto;">{hour_rows}</div>',
             unsafe_allow_html=True,
         )
     except Exception:
