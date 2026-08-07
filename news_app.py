@@ -4,6 +4,7 @@ import streamlit as st
 import xml.etree.ElementTree as ET
 import re
 import base64
+import html
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote
@@ -13,12 +14,73 @@ st.set_page_config(page_title="나만의 뉴스 탐색기", layout="wide")
 st.title("📰 오늘의 뉴스 탐색기")
 
 # 2. 날짜/날씨 정보
-today = datetime.now().strftime("%Y년 %m월 %d일")
+WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
+now = datetime.now()
+today = now.strftime("%Y년 %m월 %d일") + f" ({WEEKDAY_KR[now.weekday()]})"
+
+
+def weather_emoji(code: int) -> str:
+    """WMO 날씨 코드를 이모지로 변환."""
+    if code == 0:
+        return "☀️"
+    if code in (1, 2):
+        return "⛅"
+    if code == 3:
+        return "☁️"
+    if code in (45, 48):
+        return "🌫️"
+    if code in (51, 53, 55, 56, 57, 80, 81, 82):
+        return "🌦️"
+    if code in (61, 63, 65, 66, 67):
+        return "🌧️"
+    if code in (71, 73, 75, 77, 85, 86):
+        return "🌨️"
+    if code in (95, 96, 99):
+        return "⛈️"
+    return "🌡️"
+
+
 try:
-    weather_url = "https://api.open-meteo.com/v1/forecast?latitude=37.5665&longitude=126.9780&current=temperature_2m,weather_code"
+    weather_url = (
+        "https://api.open-meteo.com/v1/forecast"
+        "?latitude=37.5665&longitude=126.9780"
+        "&current=temperature_2m,weather_code"
+        "&hourly=temperature_2m,weather_code,precipitation_probability"
+        "&timezone=Asia/Seoul&forecast_days=1"
+    )
     weather_res = requests.get(weather_url, timeout=5).json()
-    temp = weather_res["current"]["temperature_2m"]
-    st.info(f"📅 **오늘 날짜:** {today}  |  🌡️ **현재 서울 기온:** {temp}℃")
+    current_temp = weather_res["current"]["temperature_2m"]
+    current_code = weather_res["current"]["weather_code"]
+
+    st.info(
+        f"📅 **오늘 날짜:** {today}  |  "
+        f"{weather_emoji(current_code)} **현재 서울 기온:** {current_temp}℃"
+    )
+
+    # 시간대별 예보: 3시간 간격(0,3,6,...21시)으로 오늘 하루를 보여줌
+    hourly = weather_res["hourly"]
+    times = hourly["time"]  # "2026-08-07T00:00" 형식
+    temps = hourly["temperature_2m"]
+    codes = hourly["weather_code"]
+    pops = hourly["precipitation_probability"]
+
+    hour_boxes = ""
+    for i in range(0, len(times), 3):
+        hour_label = times[i].split("T")[1][:5]  # "HH:MM" -> "HH:MM" 그대로 사용해도 되지만 시만 추출
+        hour_only = hour_label.split(":")[0] + "시"
+        hour_boxes += f"""
+<div style="display:inline-block; width:70px; text-align:center; padding:6px 2px; margin-right:4px;">
+    <div style="font-size:11px; color:#666;">{hour_only}</div>
+    <div style="font-size:20px; margin:2px 0;">{weather_emoji(codes[i])}</div>
+    <div style="font-size:12px; font-weight:600;">{temps[i]}℃</div>
+    <div style="font-size:10px; color:#4a90d9;">💧{pops[i]}%</div>
+</div>
+"""
+    st.markdown(
+        f'<div style="overflow-x:auto; white-space:nowrap; border:1px solid #eee; '
+        f'border-radius:6px; padding:4px 6px; margin-top:4px;">{hour_boxes}</div>',
+        unsafe_allow_html=True,
+    )
 except Exception:
     st.info(f"📅 **오늘 날짜:** {today}  |  🌡️ **현재 서울 기온:** 정보를 불러오지 못했습니다.")
 
@@ -27,20 +89,35 @@ st.write("---")
 # 3. 세션 상태 및 검색 기능
 if "keyword" not in st.session_state:
     st.session_state.keyword = ""
+if "label" not in st.session_state:
+    st.session_state.label = ""
 
-col1, col2, col3, col4 = st.columns(4)
-if col1.button("사회 뉴스"):
-    st.session_state.keyword = "사회"
-if col2.button("경제 뉴스"):
-    st.session_state.keyword = "경제"
-if col3.button("IT/과학 뉴스"):
-    st.session_state.keyword = "IT"
-if col4.button("정치 뉴스"):
-    st.session_state.keyword = "정치"
+# 카테고리 라벨: 실제 검색에 쓸 키워드 (일반적인 포털 뉴스 분류 기준)
+CATEGORIES = {
+    "정치": "정치",
+    "경제": "경제",
+    "사회": "사회",
+    "생활/문화": "문화",
+    "IT/과학": "IT",
+    "세계": "국제",
+    "스포츠": "스포츠",
+    "연예": "연예",
+}
+
+st.caption("📌 카테고리 선택")
+cat_items = list(CATEGORIES.items())
+for row_start in range(0, len(cat_items), 4):  # 4개씩 2줄로 배치
+    row = cat_items[row_start:row_start + 4]
+    cols = st.columns(4)
+    for col, (label, query) in zip(cols, row):
+        if col.button(label, use_container_width=True):
+            st.session_state.keyword = query
+            st.session_state.label = label
 
 manual_keyword = st.text_input("직접 키워드 입력:", value=st.session_state.keyword)
-if manual_keyword:
+if manual_keyword and manual_keyword != st.session_state.keyword:
     st.session_state.keyword = manual_keyword
+    st.session_state.label = manual_keyword  # 직접 입력한 경우 라벨=검색어
 
 
 def format_pubdate(raw: str) -> str:
@@ -53,6 +130,7 @@ def format_pubdate(raw: str) -> str:
 
 
 GOOGLE_BOILERPLATE = "comprehensive up-to-date news coverage"
+MIN_SUMMARY_LEN = 20  # 이보다 짧으면 '언론사 이름'류의 무의미한 텍스트로 간주하고 버림
 
 
 def decode_google_news_link(google_link: str) -> str:
@@ -92,7 +170,9 @@ def fetch_summary(link: str) -> str:
             tag = soup.find("meta", attrs=attrs)
             if tag and tag.get("content"):
                 summary = tag["content"].strip()
-                if summary and GOOGLE_BOILERPLATE not in summary.lower():
+                is_boilerplate = GOOGLE_BOILERPLATE in summary.lower()
+                is_too_short = len(summary) < MIN_SUMMARY_LEN
+                if summary and not is_boilerplate and not is_too_short:
                     return summary
         return ""
     except Exception:
@@ -151,7 +231,7 @@ def fetch_google_news(keyword: str, max_items: int = 10):
 
 # 4. 구글 뉴스 RSS 연동
 if st.session_state.keyword:
-    st.subheader(f"🔍 '{st.session_state.keyword}' 관련 최신 뉴스")
+    st.subheader(f"🔍 '{st.session_state.label}' 관련 최신 뉴스")
 
     try:
         news_items = fetch_google_news(st.session_state.keyword)
@@ -160,24 +240,26 @@ if st.session_state.keyword:
         st.error(f"뉴스를 불러오는 중 오류가 발생했습니다: {e}")
 
     if news_items:
+        cards_html = ""
         for item in news_items:
-            with st.container(border=True):
-                # h3(###) 대신 커스텀 폰트 크기로 제목을 좀 더 작게 표시
-                st.markdown(
-                    f'<a href="{item["link"]}" target="_blank" '
-                    f'style="font-size:17px; font-weight:600; text-decoration:none;">'
-                    f'{item["title"]}</a>',
-                    unsafe_allow_html=True,
-                )
-                meta = " | ".join(filter(None, [item["source"], f"⏰ {item['pub_date']}" if item["pub_date"] else ""]))
-                if meta:
-                    st.caption(meta)
+            summary = fetch_summary(item["link"]) or item["desc"]
+            meta = " | ".join(filter(None, [item["source"], item["pub_date"]]))
 
-                # 기사 원문에서 한 줄 요약(og:description)을 가져오고,
-                # 없으면 RSS의 description으로 대체
-                summary = fetch_summary(item["link"]) or item["desc"]
-                if summary:
-                    st.write(f"📝 {summary}")
+            title_esc = html.escape(item["title"])
+            summary_esc = html.escape(summary) if summary else ""
+            meta_esc = html.escape(meta)
+
+            cards_html += f"""
+<div style="border:1px solid #e0e0e0; border-radius:6px; padding:6px 12px; margin-bottom:4px;">
+    <a href="{item['link']}" target="_blank"
+       style="font-size:14px; font-weight:600; text-decoration:none; line-height:1.15;">
+        {title_esc}
+    </a>
+    <div style="font-size:11px; color:#888; margin-top:1px; line-height:1.1;">{meta_esc}</div>
+    {f'<div style="font-size:12.5px; color:#444; margin-top:1px; line-height:1.15;">📝 {summary_esc}</div>' if summary_esc else ''}
+</div>
+"""
+        st.markdown(cards_html, unsafe_allow_html=True)
     else:
         st.warning("검색된 뉴스가 없습니다. 다른 키워드를 입력해 보세요.")
 else:
