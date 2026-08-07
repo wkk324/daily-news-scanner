@@ -78,20 +78,44 @@ def build_mini_calendar_html(year: int, month: int, today_day: int, cell_w: int 
     return "".join(rows)
 
 
+time_col, refresh_col = st.columns([8, 1])
+with time_col:
+    st.markdown(
+        f'<div style="font-size:30px; font-weight:700; line-height:1.3;">🕐 {current_time_str}</div>',
+        unsafe_allow_html=True,
+    )
+with refresh_col:
+    if st.button("↻", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
+        st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
+        st.rerun()
+
+# 새로고침 버튼을 브라우저 새로고침 아이콘처럼 - 테두리/배경 없이 검은 화살표만, 크게
+st.markdown(
+    """
+    <style>
+    .st-key-refresh_btn button {
+        background: transparent !important;
+        border: none !important;
+        color: #111 !important;
+        font-size: 27px !important;
+        font-weight: 700 !important;
+        line-height: 1 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+    .st-key-refresh_btn button:hover {
+        color: #555 !important;
+        background: transparent !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 col_date, col_weather = st.columns([1, 1.3])
 
 with col_date:
-    time_col, refresh_col = st.columns([6, 1])
-    with time_col:
-        st.markdown(
-            f'<div style="font-size:20px; font-weight:700; line-height:1.3;">🕐 {current_time_str}</div>',
-            unsafe_allow_html=True,
-        )
-    with refresh_col:
-        if st.button("🔄", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
-            st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
-            st.rerun()
-    st.markdown(build_mini_calendar_html(now.year, now.month, now.day), unsafe_allow_html=True)
+    st.markdown(build_mini_calendar_html(now.year, now.month, now.day, cell_w=36), unsafe_allow_html=True)
 
 with col_weather:
     try:
@@ -137,6 +161,8 @@ with col_weather:
         st.markdown("🌡️ **날씨 정보를 불러오지 못했습니다.**")
 
 st.write("---")
+
+
 
 
 
