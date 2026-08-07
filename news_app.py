@@ -378,14 +378,13 @@ if st.session_state.keyword:
 
     if news_items:
         visible_items = news_items[: st.session_state.display_count]
+
         cards_html = ""
         for item in visible_items:
             meta = " | ".join(filter(None, [item["source"], item["pub_date"]]))
-            summary = fetch_summary(item["link"]) or item["desc"]
 
             title_esc = html.escape(item["title"])
             meta_esc = html.escape(meta)
-            summary_esc = html.escape(summary) if summary else ""
 
             cards_html += f"""
 <div style="border:1px solid #e0e0e0; border-radius:6px; padding:6px 12px; margin-bottom:4px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
@@ -394,7 +393,6 @@ if st.session_state.keyword:
         {title_esc}
     </a>
     <span style="font-size:11px; color:#888; white-space:nowrap;">{meta_esc}</span>
-    {f'<span style="font-size:12px; color:#666; margin-left:auto; text-align:right;">📝 {summary_esc}</span>' if summary_esc else ''}
 </div>
 """
         st.markdown(cards_html, unsafe_allow_html=True)
