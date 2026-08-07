@@ -129,8 +129,8 @@ with time_slot_col:
 
 # time_row 컨테이너 자체에 직접 margin을 줘서 위치 조정.
 # 새로고침 버튼은 title 속성(help 파라미터로 생성됨 - Streamlit 버전과 무관하게 항상 존재하는
-# 표준 HTML 속성)을 직접 타겟팅해서 큰 음수 margin-left로 시간 텍스트 쪽으로 당겨옴.
-# (이전에 쓰던 .st-key-* 방식의 컬럼 flex 조정은 이 배포 환경에서 반영되지 않아 이 방식으로 교체함)
+# 표준 HTML 속성)을 직접 타겟팅: 배경/테두리를 없애서 네모 버튼 모양이 안 보이게 하고,
+# 글자를 검은색·크게 키움.
 st.markdown(
     """
     <style>
@@ -139,8 +139,18 @@ st.markdown(
         margin-bottom: -8px;
     }
     button[title="새로고침 (기사/요약 다시 받아오기)"] {
-        margin-left: -300px !important;
-        position: relative !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        color: #000 !important;
+        font-size: 40px !important;
+        font-weight: 700 !important;
+        line-height: 1 !important;
+    }
+    button[title="새로고침 (기사/요약 다시 받아오기)"]:hover {
+        color: #444 !important;
+        background: transparent !important;
     }
     </style>
     """,
