@@ -50,6 +50,33 @@ def format_pubdate(raw: str) -> str:
         return raw
 
 
+@st.cache_data(ttl=86400, show_spinner=False)  # 24시간 캐시: 같은 기사 요약을 매번 다시 가져오지 않음
+def fetch_summary(link: str) -> str:
+    """기사 원문 페이지의 og:description(또는 description) 메타태그에서 한 줄 요약을 가져온다."""
+    if not link or link == "#":
+        return ""
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        res = requests.get(link, headers=headers, timeout=5, allow_redirects=True)
+        res.raise_for_status()
+        soup = BeautifulSoup(res.content, "html.parser")
+
+        for attrs in (
+            {"property": "og:description"},
+            {"name": "description"},
+            {"name": "twitter:description"},
+        ):
+            tag = soup.find("meta", attrs=attrs)
+            if tag and tag.get("content"):
+                summary = tag["content"].strip()
+                if summary:
+                    return summary
+        return ""
+    except Exception:
+        # 언론사 페이지 구조가 다르거나 접속이 막힌 경우 등 - 조용히 실패하고 빈 값 반환
+        return ""
+
+
 @st.cache_data(ttl=300)  # 5분 캐시: 같은 키워드로 반복 검색해도 매번 요청하지 않음
 def fetch_google_news(keyword: str, max_items: int = 10):
     """구글 뉴스 RSS에서 키워드 관련 뉴스를 가져온다."""
@@ -111,12 +138,22 @@ if st.session_state.keyword:
     if news_items:
         for item in news_items:
             with st.container(border=True):
-                st.markdown(f"### [{item['title']}]({item['link']})")
+                # h3(###) 대신 커스텀 폰트 크기로 제목을 좀 더 작게 표시
+                st.markdown(
+                    f'<a href="{item["link"]}" target="_blank" '
+                    f'style="font-size:17px; font-weight:600; text-decoration:none;">'
+                    f'{item["title"]}</a>',
+                    unsafe_allow_html=True,
+                )
                 meta = " | ".join(filter(None, [item["source"], f"⏰ {item['pub_date']}" if item["pub_date"] else ""]))
                 if meta:
                     st.caption(meta)
-                if item["desc"]:
-                    st.write(item["desc"])
+
+                # 기사 원문에서 한 줄 요약(og:description)을 가져오고,
+                # 없으면 RSS의 description으로 대체
+                summary = fetch_summary(item["link"]) or item["desc"]
+                if summary:
+                    st.write(f"📝 {summary}")
     else:
         st.warning("검색된 뉴스가 없습니다. 다른 키워드를 입력해 보세요.")
 else:
