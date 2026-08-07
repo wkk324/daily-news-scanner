@@ -114,12 +114,13 @@ LAYOUT_RATIOS = [1.3, 1, 1]  # [카테고리, 달력, 날씨] - 카테고리가 
 _, time_slot_col, _ = st.columns(LAYOUT_RATIOS)
 with time_slot_col:
     # 시간 텍스트와 새로고침 화살표를 하나의 flex 줄에 같이 넣어서 바로 옆에 붙게 함.
-    # 새로고침은 실제 <a> 링크라 인라인 style만으로 크기/색이 항상 적용됨(2배 크기: 24px -> 48px).
+    # 음수 margin-top으로 타이틀 줄 쪽으로 끌어올려서, 타이틀 밑부분과 이 줄의 밑부분이 같은 높이에 오도록 함.
+    # 새로고침 크기를 절반(48px→24px)으로 줄임.
     st.markdown(
-        f'''<div style="display:flex; align-items:center; gap:10px; margin-bottom:-8px;">
+        f'''<div style="display:flex; align-items:center; gap:8px; margin-top:-55px; margin-bottom:-8px;">
     <span style="font-size:30px; font-weight:700; line-height:1.3; white-space:nowrap;">🕐 {current_time_str}</span>
     <a href="?refresh=1" title="새로고침 (기사/요약 다시 받아오기)"
-       style="text-decoration:none; color:#111; font-size:48px; font-weight:700; line-height:1;">↻</a>
+       style="text-decoration:none; color:#111; font-size:24px; font-weight:700; line-height:1;">↻</a>
 </div>''',
         unsafe_allow_html=True,
     )
@@ -147,7 +148,7 @@ with col_weather:
             "&hourly=temperature_2m,weather_code,precipitation_probability"
             "&timezone=Asia/Seoul&forecast_days=1"
         )
-        weather_res = requests.get(weather_url, timeout=5).json()
+        weather_res = requests.get(weather_url, timeout=10).json()
         current_temp = weather_res["current"]["temperature_2m"]
         current_code = weather_res["current"]["weather_code"]
 
@@ -178,8 +179,9 @@ with col_weather:
             f'width:50%; max-height:220px; overflow-y:auto;">{hour_rows}</div>',
             unsafe_allow_html=True,
         )
-    except Exception:
+    except Exception as e:
         st.markdown("🌡️ **날씨 정보를 불러오지 못했습니다.**")
+        st.caption(f"(오류 상세: {e})")  # 원인 파악용 - 문제 없으면 나중에 지워도 됨
 
 with outer_left:
     st.markdown("📌 **카테고리 선택**")
