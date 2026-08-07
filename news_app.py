@@ -337,7 +337,7 @@ def fetch_summary(link: str) -> str:
 
 
 @st.cache_data(ttl=300)  # 5분 캐시: 같은 키워드로 반복 검색해도 매번 요청하지 않음
-def fetch_google_news(keyword: str, max_items: int = 60):
+def fetch_google_news(keyword: str, max_items: int = 100):
     """구글 뉴스 RSS에서 키워드 관련 뉴스를 가져온다. (넉넉히 받아둔 뒤 화면에는 일부만 보여주고,
     '더보기' 클릭 시 이미 받아온 목록에서 추가로 꺼내 쓴다 - 재요청 없이 빠름)
     keyword가 MAIN_QUERY이면 특정 주제 검색 없이 구글이 선정한 톱헤드라인 피드를 사용한다."""
@@ -395,15 +395,17 @@ def fetch_google_news(keyword: str, max_items: int = 60):
 
 
 @st.cache_data(ttl=300)  # 5분 캐시
-def fetch_all_categories_news(max_items: int = 60):
-    """'전체' 카테고리용: 정치/경제/사회/문화/IT/국제/스포츠/연예를 전부 검색해서
-    하나로 합친 뒤 중복(같은 링크)을 제거하고 최신순으로 정렬한다."""
+def fetch_all_categories_news(max_items: int = 150):
+    """'전체' 카테고리용: 정치/경제/사회/문화/IT/국제/스포츠/연예 8개 카테고리 +
+    '주요'(구글 톱헤드라인 피드)까지 전부 합쳐서, 중복(같은 링크)을 제거하고 최신순으로 정렬한다.
+    이렇게 하면 8개 카테고리 검색에는 안 걸리지만 '주요'에만 뜨는 애매한 주제 기사도 빠짐없이 포함됨.
+    (넉넉히 모아둬야 '더보기'를 여러 번 눌렀을 때 며칠 전 기사까지 나올 수 있음)"""
     all_items = []
     seen_links = set()
     for label, query in CATEGORIES.items():
         if query == ALL_QUERY:
-            continue  # '전체' 자기 자신은 건너뜀
-        for item in fetch_google_news(query, max_items=30):
+            continue  # '전체' 자기 자신만 건너뜀 ('주요'는 이제 포함시킴)
+        for item in fetch_google_news(query, max_items=60):
             if item["link"] not in seen_links:
                 seen_links.add(item["link"])
                 all_items.append(item)
