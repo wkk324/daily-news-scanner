@@ -17,7 +17,7 @@ st.title("📰 오늘의 뉴스 탐색기")
 # 2. 날짜/날씨 정보
 WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 now = datetime.now()
-today = now.strftime("%Y년 %m월 %d일") + f" ({WEEKDAY_KR[now.weekday()]})"
+current_time_str = now.strftime("%Y년 %m월 %d일") + f" ({WEEKDAY_KR[now.weekday()]}) " + now.strftime("%H:%M:%S")
 
 
 def weather_emoji(code: int) -> str:
@@ -47,7 +47,7 @@ def build_mini_calendar_html(year: int, month: int, today_day: int) -> str:
     weeks = cal.monthdayscalendar(year, month)
     headers = ["일", "월", "화", "수", "목", "금", "토"]
 
-    rows = ['<table style="border-collapse:collapse; font-size:11px; width:100%; text-align:center;">']
+    rows = ['<table style="border-collapse:collapse; font-size:11px; width:170px; table-layout:fixed; text-align:center;">']
     rows.append("<tr>")
     for i, h in enumerate(headers):
         color = "#e74c3c" if i == 0 else ("#3b82f6" if i == 6 else "#666")
@@ -70,8 +70,8 @@ def build_mini_calendar_html(year: int, month: int, today_day: int) -> str:
             else:
                 style = ""
             rows.append(
-                f'<td style="padding:2px;"><span style="{style} display:inline-block; '
-                f'width:18px; height:18px; line-height:18px;">{day}</span></td>'
+                f'<td style="padding:1px;"><span style="{style} display:inline-block; '
+                f'width:18px; height:16px; line-height:16px;">{day}</span></td>'
             )
         rows.append("</tr>")
     rows.append("</table>")
@@ -81,7 +81,7 @@ def build_mini_calendar_html(year: int, month: int, today_day: int) -> str:
 col_date, col_weather = st.columns([1, 1.3])
 
 with col_date:
-    st.markdown(f"📅 **오늘 날짜:** {today}")
+    st.markdown(f"🕐 **현재시간:** {current_time_str}")
     st.markdown(build_mini_calendar_html(now.year, now.month, now.day), unsafe_allow_html=True)
 
 with col_weather:
@@ -121,7 +121,7 @@ with col_weather:
 """
         st.markdown(
             f'<div style="border:1px solid #eee; border-radius:6px; '
-            f'max-height:220px; overflow-y:auto;">{hour_rows}</div>',
+            f'width:260px; max-height:220px; overflow-y:auto;">{hour_rows}</div>',
             unsafe_allow_html=True,
         )
     except Exception:
@@ -137,8 +137,11 @@ if "keyword" not in st.session_state:
 if "label" not in st.session_state:
     st.session_state.label = ""
 
+ALL_QUERY = "__ALL__"  # '전체' 카테고리를 나타내는 특수 값 (검색어 없이 전체 헤드라인)
+
 # 카테고리 라벨: 실제 검색에 쓸 키워드 (일반적인 포털 뉴스 분류 기준)
 CATEGORIES = {
+    "전체": ALL_QUERY,
     "정치": "정치",
     "경제": "경제",
     "사회": "사회",
@@ -149,11 +152,18 @@ CATEGORIES = {
     "연예": "연예",
 }
 
-st.caption("📌 카테고리 선택")
+cap_col, refresh_col = st.columns([4, 1])
+with cap_col:
+    st.caption("📌 카테고리 선택")
+with refresh_col:
+    if st.button("🔄 새로고침", use_container_width=True):
+        st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
+        st.rerun()
+
 cat_items = list(CATEGORIES.items())
-for row_start in range(0, len(cat_items), 4):  # 4개씩 2줄로 배치
-    row = cat_items[row_start:row_start + 4]
-    cols = st.columns(4)
+for row_start in range(0, len(cat_items), 3):  # 3개씩 3줄로 배치
+    row = cat_items[row_start:row_start + 3]
+    cols = st.columns(3)
     for col, (label, query) in zip(cols, row):
         if col.button(label, use_container_width=True):
             st.session_state.keyword = query
@@ -227,8 +237,12 @@ def fetch_summary(link: str) -> str:
 
 @st.cache_data(ttl=300)  # 5분 캐시: 같은 키워드로 반복 검색해도 매번 요청하지 않음
 def fetch_google_news(keyword: str, max_items: int = 10):
-    """구글 뉴스 RSS에서 키워드 관련 뉴스를 가져온다."""
-    url = f"https://news.google.com/rss/search?q={quote(keyword)}&hl=ko&gl=KR&ceid=KR:ko"
+    """구글 뉴스 RSS에서 키워드 관련 뉴스를 가져온다.
+    keyword가 ALL_QUERY이면 특정 주제 검색 없이 전체 헤드라인 피드를 사용한다."""
+    if keyword == ALL_QUERY:
+        url = "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
+    else:
+        url = f"https://news.google.com/rss/search?q={quote(keyword)}&hl=ko&gl=KR&ceid=KR:ko"
     headers = {"User-Agent": "Mozilla/5.0"}
     res = requests.get(url, headers=headers, timeout=10)
     res.raise_for_status()
@@ -271,12 +285,17 @@ def fetch_google_news(keyword: str, max_items: int = 10):
             "source": source,
             "desc": desc_text,
         })
+
+    # pub_date가 "YYYY-MM-DD HH:MM" 형식(0으로 채워진 고정 길이)이라 문자열 그대로
+    # 내림차순 정렬해도 최신순이 됨. 날짜를 못 가져온 항목("")은 자동으로 맨 뒤로 감.
+    news_list.sort(key=lambda x: x["pub_date"], reverse=True)
     return news_list
 
 
 # 4. 구글 뉴스 RSS 연동
 if st.session_state.keyword:
-    st.subheader(f"🔍 '{st.session_state.label}' 관련 최신 뉴스")
+    header_text = "전체 최신 뉴스" if st.session_state.keyword == ALL_QUERY else f"'{st.session_state.label}' 관련 최신 뉴스"
+    st.subheader(f"🔍 {header_text}")
 
     try:
         news_items = fetch_google_news(st.session_state.keyword)
