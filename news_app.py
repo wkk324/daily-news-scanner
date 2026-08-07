@@ -57,14 +57,17 @@ def fetch_google_news(keyword: str, max_items: int = 10):
     res = requests.get(url, headers=headers, timeout=10)
     res.raise_for_status()
 
-    soup = BeautifulSoup(res.content, "xml")  # 구글 뉴스는 표준 XML이라 xml 파서 사용
+    # "xml" 파서는 lxml 패키지가 필요한데 Streamlit Cloud 기본 환경엔 없는 경우가 많아
+    # FeatureNotFound 에러가 남. 표준 라이브러리만으로 동작하는 html.parser 사용.
+    # (html.parser는 태그명을 전부 소문자로 바꿔서 파싱하므로 find()도 소문자로 맞춰야 함)
+    soup = BeautifulSoup(res.content, "html.parser")
     items = soup.find_all("item")
 
     news_list = []
     for item in items[:max_items]:
         title = item.find("title").text if item.find("title") else "제목 없음"
         link = item.find("link").text.strip() if item.find("link") else "#"
-        pub_date = format_pubdate(item.find("pubDate").text) if item.find("pubDate") else ""
+        pub_date = format_pubdate(item.find("pubdate").text) if item.find("pubdate") else ""
         source = item.find("source").text if item.find("source") else ""
 
         # 구글 뉴스 RSS의 description은 보통 제목을 감싼 <a> 태그 하나뿐이라
