@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 import re
 import base64
 import html
+import calendar
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote
@@ -40,51 +41,95 @@ def weather_emoji(code: int) -> str:
     return "🌡️"
 
 
-try:
-    weather_url = (
-        "https://api.open-meteo.com/v1/forecast"
-        "?latitude=37.5665&longitude=126.9780"
-        "&current=temperature_2m,weather_code"
-        "&hourly=temperature_2m,weather_code,precipitation_probability"
-        "&timezone=Asia/Seoul&forecast_days=1"
-    )
-    weather_res = requests.get(weather_url, timeout=5).json()
-    current_temp = weather_res["current"]["temperature_2m"]
-    current_code = weather_res["current"]["weather_code"]
+def build_mini_calendar_html(year: int, month: int, today_day: int) -> str:
+    """작은 한 달 달력 HTML을 만든다. 오늘 날짜는 동그라미로 강조."""
+    cal = calendar.Calendar(firstweekday=6)  # 일요일부터 시작
+    weeks = cal.monthdayscalendar(year, month)
+    headers = ["일", "월", "화", "수", "목", "금", "토"]
 
-    st.info(
-        f"📅 **오늘 날짜:** {today}  |  "
-        f"{weather_emoji(current_code)} **현재 서울 기온:** {current_temp}℃"
-    )
+    rows = ['<table style="border-collapse:collapse; font-size:11px; width:100%; text-align:center;">']
+    rows.append("<tr>")
+    for i, h in enumerate(headers):
+        color = "#e74c3c" if i == 0 else ("#3b82f6" if i == 6 else "#666")
+        rows.append(f'<th style="padding:2px; color:{color}; font-weight:500;">{h}</th>')
+    rows.append("</tr>")
 
-    # 시간대별 예보: 3시간 간격(0,3,6,...21시)으로 오늘 하루를 보여줌
-    hourly = weather_res["hourly"]
-    times = hourly["time"]  # "2026-08-07T00:00" 형식
-    temps = hourly["temperature_2m"]
-    codes = hourly["weather_code"]
-    pops = hourly["precipitation_probability"]
+    for week in weeks:
+        rows.append("<tr>")
+        for i, day in enumerate(week):
+            if day == 0:
+                rows.append('<td style="padding:2px;"></td>')
+                continue
+            is_today = day == today_day
+            if is_today:
+                style = "background:#4a90d9; color:white; border-radius:50%;"
+            elif i == 0:
+                style = "color:#e74c3c;"
+            elif i == 6:
+                style = "color:#3b82f6;"
+            else:
+                style = ""
+            rows.append(
+                f'<td style="padding:2px;"><span style="{style} display:inline-block; '
+                f'width:18px; height:18px; line-height:18px;">{day}</span></td>'
+            )
+        rows.append("</tr>")
+    rows.append("</table>")
+    return "".join(rows)
 
-    hour_boxes = ""
-    for i in range(0, len(times), 3):
-        hour_label = times[i].split("T")[1][:5]  # "HH:MM" -> "HH:MM" 그대로 사용해도 되지만 시만 추출
-        hour_only = hour_label.split(":")[0] + "시"
-        hour_boxes += f"""
-<div style="display:inline-block; width:70px; text-align:center; padding:6px 2px; margin-right:4px;">
-    <div style="font-size:11px; color:#666;">{hour_only}</div>
-    <div style="font-size:20px; margin:2px 0;">{weather_emoji(codes[i])}</div>
-    <div style="font-size:12px; font-weight:600;">{temps[i]}℃</div>
-    <div style="font-size:10px; color:#4a90d9;">💧{pops[i]}%</div>
+
+col_date, col_weather = st.columns([1, 1.3])
+
+with col_date:
+    st.markdown(f"📅 **오늘 날짜:** {today}")
+    st.markdown(build_mini_calendar_html(now.year, now.month, now.day), unsafe_allow_html=True)
+
+with col_weather:
+    try:
+        weather_url = (
+            "https://api.open-meteo.com/v1/forecast"
+            "?latitude=37.5665&longitude=126.9780"
+            "&current=temperature_2m,weather_code"
+            "&hourly=temperature_2m,weather_code,precipitation_probability"
+            "&timezone=Asia/Seoul&forecast_days=1"
+        )
+        weather_res = requests.get(weather_url, timeout=5).json()
+        current_temp = weather_res["current"]["temperature_2m"]
+        current_code = weather_res["current"]["weather_code"]
+
+        st.markdown(
+            f"{weather_emoji(current_code)} **현재 서울 기온:** {current_temp}℃"
+        )
+
+        # 시간대별 예보를 3시간 간격으로 위에서 아래로 나열
+        hourly = weather_res["hourly"]
+        times = hourly["time"]  # "2026-08-07T00:00" 형식
+        temps = hourly["temperature_2m"]
+        codes = hourly["weather_code"]
+        pops = hourly["precipitation_probability"]
+
+        hour_rows = ""
+        for i in range(0, len(times), 3):
+            hour_only = times[i].split("T")[1][:2] + "시"
+            hour_rows += f"""
+<div style="display:flex; justify-content:space-between; align-items:center; padding:3px 8px; border-bottom:1px solid #f0f0f0; font-size:12px;">
+    <span style="color:#666; width:32px;">{hour_only}</span>
+    <span style="font-size:15px;">{weather_emoji(codes[i])}</span>
+    <span style="font-weight:600; width:38px; text-align:right;">{temps[i]}℃</span>
+    <span style="color:#4a90d9; width:48px; text-align:right;">💧{pops[i]}%</span>
 </div>
 """
-    st.markdown(
-        f'<div style="overflow-x:auto; white-space:nowrap; border:1px solid #eee; '
-        f'border-radius:6px; padding:4px 6px; margin-top:4px;">{hour_boxes}</div>',
-        unsafe_allow_html=True,
-    )
-except Exception:
-    st.info(f"📅 **오늘 날짜:** {today}  |  🌡️ **현재 서울 기온:** 정보를 불러오지 못했습니다.")
+        st.markdown(
+            f'<div style="border:1px solid #eee; border-radius:6px; '
+            f'max-height:220px; overflow-y:auto;">{hour_rows}</div>',
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        st.markdown("🌡️ **날씨 정보를 불러오지 못했습니다.**")
 
 st.write("---")
+
+
 
 # 3. 세션 상태 및 검색 기능
 if "keyword" not in st.session_state:
