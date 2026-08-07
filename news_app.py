@@ -377,21 +377,18 @@ if st.session_state.keyword:
         visible_items = news_items[: st.session_state.display_count]
         cards_html = ""
         for item in visible_items:
-            summary = fetch_summary(item["link"]) or item["desc"]
             meta = " | ".join(filter(None, [item["source"], item["pub_date"]]))
 
             title_esc = html.escape(item["title"])
-            summary_esc = html.escape(summary) if summary else ""
             meta_esc = html.escape(meta)
 
             cards_html += f"""
-<div style="border:1px solid #e0e0e0; border-radius:6px; padding:6px 12px; margin-bottom:4px;">
+<div style="border:1px solid #e0e0e0; border-radius:6px; padding:6px 12px; margin-bottom:4px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
     <a href="{item['link']}" target="_blank"
-       style="font-size:14px; font-weight:600; text-decoration:none; line-height:1.15;">
+       style="font-size:14px; font-weight:600; text-decoration:none; line-height:1.3;">
         {title_esc}
     </a>
-    <div style="font-size:11px; color:#888; margin-top:1px; line-height:1.1;">{meta_esc}</div>
-    {f'<div style="font-size:12.5px; color:#444; margin-top:1px; line-height:1.15;">📝 {summary_esc}</div>' if summary_esc else ''}
+    <span style="font-size:11px; color:#888; white-space:nowrap;">{meta_esc}</span>
 </div>
 """
         st.markdown(cards_html, unsafe_allow_html=True)
