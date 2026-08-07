@@ -84,7 +84,7 @@ def build_mini_calendar_html(year: int, month: int, today_day: int, cell_w: int 
                 continue
             is_today = day == today_day
             if is_today:
-                style = "background:#4a90d9; color:white; border-radius:50%;"
+                style = "background:#4a90d9; color:white;"
             elif i == 0:
                 style = "color:#e74c3c;"
             elif i == 6:
