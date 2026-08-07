@@ -2,6 +2,8 @@ from bs4 import BeautifulSoup
 import requests
 import streamlit as st
 import xml.etree.ElementTree as ET
+import re
+import base64
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote
@@ -50,6 +52,27 @@ def format_pubdate(raw: str) -> str:
         return raw
 
 
+GOOGLE_BOILERPLATE = "comprehensive up-to-date news coverage"
+
+
+def decode_google_news_link(google_link: str) -> str:
+    """구글 뉴스 리다이렉트 링크(news.google.com/rss/articles/...) 안에 인코딩된
+    실제 언론사 기사 URL을 추출한다. 디코딩에 실패하면 원래 링크를 그대로 반환."""
+    try:
+        match = re.search(r"/articles/([^?]+)", google_link)
+        if not match:
+            return google_link
+        encoded = match.group(1)
+        padded = encoded + "=" * (-len(encoded) % 4)  # base64 패딩 보정
+        decoded_bytes = base64.urlsafe_b64decode(padded)
+        url_match = re.search(rb"https?://[^\x00-\x1f\"'<>]+", decoded_bytes)
+        if url_match:
+            return url_match.group(0).decode("utf-8", errors="ignore")
+    except Exception:
+        pass
+    return google_link
+
+
 @st.cache_data(ttl=86400, show_spinner=False)  # 24시간 캐시: 같은 기사 요약을 매번 다시 가져오지 않음
 def fetch_summary(link: str) -> str:
     """기사 원문 페이지의 og:description(또는 description) 메타태그에서 한 줄 요약을 가져온다."""
@@ -69,7 +92,7 @@ def fetch_summary(link: str) -> str:
             tag = soup.find("meta", attrs=attrs)
             if tag and tag.get("content"):
                 summary = tag["content"].strip()
-                if summary:
+                if summary and GOOGLE_BOILERPLATE not in summary.lower():
                     return summary
         return ""
     except Exception:
@@ -101,7 +124,8 @@ def fetch_google_news(keyword: str, max_items: int = 10):
         desc_el = item.find("description")
 
         title = title_el.text if title_el is not None and title_el.text else "제목 없음"
-        link = link_el.text.strip() if link_el is not None and link_el.text else "#"
+        raw_link = link_el.text.strip() if link_el is not None and link_el.text else "#"
+        link = decode_google_news_link(raw_link)  # 구글 중간 리다이렉트 대신 실제 언론사 URL로 교체 시도
         pub_date = format_pubdate(pubdate_el.text) if pubdate_el is not None and pubdate_el.text else ""
         source = source_el.text if source_el is not None and source_el.text else ""
 
