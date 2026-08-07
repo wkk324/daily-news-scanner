@@ -243,6 +243,18 @@ def format_pubdate(raw: str) -> str:
 GOOGLE_BOILERPLATE = "comprehensive up-to-date news coverage"
 MIN_SUMMARY_LEN = 20  # 이보다 짧으면 '언론사 이름'류의 무의미한 텍스트로 간주하고 버림
 
+# 문장을 끝맺는 표현("~다", "~요", "~함", 마침표 등)이 있는지로 '진짜 문장'인지 판별.
+# 언론사 이름 나열("연합뉴스, 조선일보, 중앙일보")은 이런 종결 표현이 없는 경우가 대부분.
+SENTENCE_ENDINGS = ("다", "다.", "요", "요.", "함", "함.", ".", "!", "?", "습니다", "됩니다")
+
+
+def looks_like_outlet_list(text: str) -> bool:
+    """구글 뉴스 '여러 언론사 모아보기' 페이지에서 나오는, 언론사 이름을 나열한
+    텍스트인지 대략적으로 판별한다 (쉼표/가운뎃점이 많고 문장 종결 표현이 없으면 나열로 간주)."""
+    separator_count = text.count(",") + text.count("·")
+    ends_like_sentence = text.rstrip().endswith(SENTENCE_ENDINGS)
+    return separator_count >= 2 and not ends_like_sentence
+
 
 def decode_google_news_link(google_link: str) -> str:
     """구글 뉴스 리다이렉트 링크(news.google.com/rss/articles/...) 안에 인코딩된
@@ -283,7 +295,8 @@ def fetch_summary(link: str) -> str:
                 summary = tag["content"].strip()
                 is_boilerplate = GOOGLE_BOILERPLATE in summary.lower()
                 is_too_short = len(summary) < MIN_SUMMARY_LEN
-                if summary and not is_boilerplate and not is_too_short:
+                is_outlet_list = looks_like_outlet_list(summary)
+                if summary and not is_boilerplate and not is_too_short and not is_outlet_list:
                     return summary
         return ""
     except Exception:
