@@ -191,80 +191,35 @@ def fetch_weather(lat: float, lon: float):
     return weather_res
 
 
-@st.cache_data(ttl=3600, show_spinner=False)  # 1시간 캐시 - 같은 좌표를 반복 조회하지 않음
-def reverse_geocode(lat: float, lon: float):
-    """좌표를 '시/도 구 동' 형태의 사람이 읽을 수 있는 지명으로 변환한다 (OpenStreetMap Nominatim, 무료).
-    (라벨, 원본 address 딕셔너리) 튜플을 반환 - 원본은 필드명이 예상과 다를 때 디버깅용."""
+@st.cache_data(ttl=3600, show_spinner=False)  # 1시간 캐시 - 같은 IP를 반복 조회하지 않음
+def locate_by_ip(ip: str):
+    """접속 IP 주소로 대략적인 위치(도시 단위)를 추정한다 (ip-api.com, 무료).
+    (라벨, 위도, 경도) 튜플을 반환. 실패하면 서울 기본값을 반환."""
+    default = ("서울", 37.5665, 126.9780)
+    if not ip:
+        return default
     try:
-        url = "https://nominatim.openstreetmap.org/reverse"
-        params = {
-            "format": "jsonv2",
-            "lat": lat,
-            "lon": lon,
-            "accept-language": "ko",
-            "zoom": 16,  # 너무 높으면(18+) 건물/도로 단위까지 내려가서 오히려 구/동이 안 잡힐 수 있음
-            "addressdetails": 1,
-        }
-        # Nominatim은 User-Agent 헤더가 없으면 요청을 거부하므로 반드시 넣어야 함
-        headers = {"User-Agent": "news-explorer-app/1.0 (contact: none)"}
-        res = requests.get(url, params=params, headers=headers, timeout=5)
+        url = f"http://ip-api.com/json/{ip}"
+        params = {"lang": "ko", "fields": "status,city,regionName,lat,lon"}
+        res = requests.get(url, params=params, timeout=5)
         res.raise_for_status()
-        address = res.json().get("address", {})
-
-        city = (
-            address.get("city") or address.get("province") or address.get("state") or ""
-        )
-        # 국내 행정구역상 '구'는 city_district/borough/county, '동'은
-        # neighbourhood/suburb/quarter/town/village 중 하나에 담기는 경우가 많음 (지역마다 다름)
-        gu = (
-            address.get("borough") or address.get("city_district")
-            or address.get("county") or ""
-        )
-        dong = (
-            address.get("neighbourhood") or address.get("suburb")
-            or address.get("quarter") or address.get("town") or address.get("village") or ""
-        )
-
-        parts = [p for p in (city, gu, dong) if p]
-        label = " ".join(parts) if parts else "내 위치"
-        return label, address
+        data = res.json()
+        if data.get("status") != "success":
+            return default
+        city = data.get("city") or ""
+        region = data.get("regionName") or ""
+        label = " ".join(p for p in (region, city) if p) or "내 위치"
+        return label, data["lat"], data["lon"]
     except Exception:
-        return "내 위치", {}
+        return default
 
 
-# 브라우저 위치 정보 요청: lat/lon이 아직 URL에 없으면, 위치 권한을 요청하는 보이지 않는
-# JS 컴포넌트를 실행한다. 사용자가 허용하면 좌표를 URL에 담아 페이지를 새로고침한다.
-# 거부하거나 실패하면 기본값(서울)을 계속 사용한다.
-if "lat" in st.query_params and "lon" in st.query_params:
-    weather_lat = float(st.query_params["lat"])
-    weather_lon = float(st.query_params["lon"])
-    weather_location_label, _geocode_debug = reverse_geocode(weather_lat, weather_lon)  # 예: "인천 남동구 만수동"
-else:
-    weather_lat, weather_lon = 37.5665, 126.9780  # 기본값: 서울
-    weather_location_label = "서울"
-    _geocode_debug = {}
-    # st.components.v1.html은 최신 Streamlit에서 제거 대상이라 st.iframe으로 교체
-    # (HTML 문자열을 넘기면 자동으로 인식해서 iframe 안에 그대로 넣어줌)
-    st.iframe(
-        """
-        <script>
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                function(pos) {
-                    const lat = pos.coords.latitude.toFixed(4);
-                    const lon = pos.coords.longitude.toFixed(4);
-                    const url = new URL(window.parent.location.href);
-                    url.searchParams.set('lat', lat);
-                    url.searchParams.set('lon', lon);
-                    window.parent.location.href = url.toString();
-                },
-                function(err) { /* 권한 거부/실패 시 아무것도 안 함 - 서울 날씨 유지 */ }
-            );
-        }
-        </script>
-        """,
-        height=1,
-    )
+# 접속 IP로 위치 추정: 브라우저 GPS 권한 요청은 Streamlit이 만드는 iframe에
+# geolocation 권한이 기본적으로 허용되지 않아 계속 실패했음 - 그래서 서버가 받은 접속 IP
+# 기반으로 위치를 추정하는 방식으로 교체함 (권한 팝업 불필요, iframe 문제 없음).
+# 다만 GPS보다는 정밀도가 낮아서 보통 시/구 단위까지만 잡히고 동 단위는 어려울 수 있음.
+weather_location_label, weather_lat, weather_lon = locate_by_ip(st.context.ip_address)
+_geocode_debug = {"ip": st.context.ip_address}  # 원인 파악용 - 문제 없으면 나중에 지워도 됨
 
 
 with col_weather:
