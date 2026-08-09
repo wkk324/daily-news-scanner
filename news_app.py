@@ -6,6 +6,7 @@ import calendar
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 from streamlit_js_eval import streamlit_js_eval
 
 # 1. 페이지 설정
@@ -13,7 +14,7 @@ st.set_page_config(page_title="뉴스 검색기", layout="wide")
 
 # 2. 날짜/날씨/카테고리 정보
 WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
-now = datetime.now()
+now = datetime.now(ZoneInfo("Asia/Seoul"))
 current_time_str = now.strftime("%Y년 %m월 %d일") + f" ({WEEKDAY_KR[now.weekday()]}) " + now.strftime("%H:%M:%S")
 
 ALL_QUERY = "__ALL__"  # '전체' 카테고리를 나타내는 특수 값 (모든 카테고리를 합쳐서 최신순 정렬)
