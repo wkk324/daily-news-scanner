@@ -215,6 +215,26 @@ def locate_by_ip(ip: str):
         return default
 
 
+@st.cache_data(ttl=3600, show_spinner=False)  # 1시간 캐시 - 같은 좌표를 반복 조회하지 않음
+def reverse_geocode_dong(lat: float, lon: float) -> str:
+    """좌표를 '시 구 동' 수준의 한글 주소로 변환한다 (OpenStreetMap Nominatim, 키 불필요).
+    실패하거나 동 단위 정보가 없으면 빈 문자열을 반환한다 (호출부에서 대체 라벨을 씀)."""
+    try:
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {"format": "jsonv2", "lat": lat, "lon": lon, "zoom": 18, "accept-language": "ko"}
+        # Nominatim 사용 정책상 식별 가능한 User-Agent가 필요함 (익명 UA는 차단될 수 있음)
+        headers = {"User-Agent": "daily-news-scanner/1.0 (personal streamlit weather widget)"}
+        res = requests.get(url, params=params, headers=headers, timeout=5)
+        res.raise_for_status()
+        addr = res.json().get("address", {})
+        si = addr.get("city") or addr.get("town") or addr.get("county") or ""
+        gu = addr.get("borough") or addr.get("city_district") or ""
+        dong = addr.get("quarter") or addr.get("suburb") or addr.get("neighbourhood") or ""
+        return " ".join(p for p in (si, gu, dong) if p)
+    except Exception:
+        return ""
+
+
 # 접속 IP로 위치 추정 (기본값 - GPS 권한을 아직 못 받았거나 거부됐을 때 쓰는 fallback)
 weather_location_label, weather_lat, weather_lon = locate_by_ip(st.context.ip_address)
 location_source = "IP"
@@ -229,8 +249,9 @@ with col_weather:
     if gps_loc and gps_loc.get("latitude") is not None:
         weather_lat = gps_loc["latitude"]
         weather_lon = gps_loc["longitude"]
-        weather_location_label = "내 위치"
         location_source = "GPS"
+        dong_label = reverse_geocode_dong(weather_lat, weather_lon)
+        weather_location_label = dong_label or "내 위치"
 
     try:
         weather_res = fetch_weather(weather_lat, weather_lon)
