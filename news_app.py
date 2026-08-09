@@ -1,14 +1,11 @@
 from bs4 import BeautifulSoup
 import requests
 import streamlit as st
-import xml.etree.ElementTree as ET
-import re
-import base64
 import html
 import calendar
-from datetime import datetime, timedelta
+from datetime import datetime
 from email.utils import parsedate_to_datetime
-from urllib.parse import quote
+from urllib.parse import urlparse
 from streamlit_js_eval import streamlit_js_eval
 
 # 1. 페이지 설정
@@ -27,8 +24,8 @@ if "keyword" not in st.session_state:
     st.session_state.keyword = ALL_QUERY
 if "label" not in st.session_state:
     st.session_state.label = "전체"
-if "display_count" not in st.session_state:
-    st.session_state.display_count = 20  # 처음엔 20개만 보여주고, '더보기' 클릭 시 늘어남
+if "naver_target_total" not in st.session_state:
+    st.session_state.naver_target_total = 100  # 네이버는 '더보기' 누를 때마다 100개씩 실제로 더 가져옴
 if "gps_nonce" not in st.session_state:
     st.session_state.gps_nonce = 0  # 새로고침 버튼을 누를 때마다 증가시켜 GPS 위치를 다시 요청시킴
 
@@ -320,7 +317,9 @@ with col_weather:
     <span style="color:#666; width:32px;">{hour_only}</span>
     <span style="font-size:15px;">{weather_emoji(codes[i])}</span>
     <span style="font-weight:600; width:38px; text-align:right;">{temps[i]}℃</span>
-    <span style="color:#4a90d9; width:48px; text-align:right;">💧{pops[i]}%</span>
+    <span style="color:#4a90d9; width:48px; display:inline-flex; justify-content:flex-end; gap:2px;">
+        <span>💧</span><span style="width:26px; text-align:right;">{pops[i]}%</span>
+    </span>
 </div>
 """
         st.markdown(
@@ -343,7 +342,7 @@ with outer_left:
             if col.button(label, use_container_width=True):
                 st.session_state.keyword = query
                 st.session_state.label = label
-                st.session_state.display_count = 20  # 카테고리를 바꾸면 노출 개수도 처음(20개)으로 리셋
+                st.session_state.naver_target_total = 100
 
     st.markdown('<div style="height:64px;"></div>', unsafe_allow_html=True)  # 달력 아래쪽 높이와 맞추기 위한 여백
 
@@ -360,7 +359,7 @@ with outer_left:
     if manual_keyword and manual_keyword != st.session_state.label:
         st.session_state.keyword = manual_keyword
         st.session_state.label = manual_keyword  # 직접 입력한 경우 라벨=검색어
-        st.session_state.display_count = 20  # 키워드가 바뀌면 노출 개수도 처음(20개)으로 리셋
+        st.session_state.naver_target_total = 100
 
 st.write("---")
 
@@ -376,202 +375,188 @@ def format_pubdate(raw: str) -> str:
         return raw
 
 
-GOOGLE_BOILERPLATE = "comprehensive up-to-date news coverage"
-MIN_SUMMARY_LEN = 20  # 이보다 짧으면 '언론사 이름'류의 무의미한 텍스트로 간주하고 버림
-
-# 문장을 끝맺는 표현("~다", "~요", "~함", 마침표 등)이 있는지로 '진짜 문장'인지 판별.
-# 언론사 이름 나열("연합뉴스, 조선일보, 중앙일보")은 이런 종결 표현이 없는 경우가 대부분.
-SENTENCE_ENDINGS = ("다", "다.", "요", "요.", "함", "함.", ".", "!", "?", "습니다", "됩니다")
-
-
-def looks_like_outlet_list(text: str) -> bool:
-    """구글 뉴스 '여러 언론사 모아보기' 페이지에서 나오는, 언론사 이름을 나열한
-    텍스트인지 대략적으로 판별한다 (쉼표/가운뎃점이 많고 문장 종결 표현이 없으면 나열로 간주)."""
-    separator_count = text.count(",") + text.count("·")
-    ends_like_sentence = text.rstrip().endswith(SENTENCE_ENDINGS)
-    return separator_count >= 2 and not ends_like_sentence
-
-
-def decode_google_news_link(google_link: str) -> str:
-    """구글 뉴스 리다이렉트 링크(news.google.com/rss/articles/...) 안에 인코딩된
-    실제 언론사 기사 URL을 추출한다. 디코딩에 실패하면 원래 링크를 그대로 반환."""
-    try:
-        match = re.search(r"/articles/([^?]+)", google_link)
-        if not match:
-            return google_link
-        encoded = match.group(1)
-        padded = encoded + "=" * (-len(encoded) % 4)  # base64 패딩 보정
-        decoded_bytes = base64.urlsafe_b64decode(padded)
-        url_match = re.search(rb"https?://[^\x00-\x1f\"'<>]+", decoded_bytes)
-        if url_match:
-            return url_match.group(0).decode("utf-8", errors="ignore")
-    except Exception:
-        pass
-    return google_link
-
-
-@st.cache_data(ttl=86400, show_spinner=False)  # 24시간 캐시: 같은 기사 요약을 매번 다시 가져오지 않음
-def fetch_summary(link: str) -> str:
-    """기사 원문 페이지의 og:description(또는 description) 메타태그에서 한 줄 요약을 가져온다."""
-    if not link or link == "#":
-        return ""
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(link, headers=headers, timeout=5, allow_redirects=True)
+@st.cache_data(ttl=300)  # 5분 캐시
+def fetch_naver_finance_news(max_items: int = 100):
+    """네이버 금융의 '실시간속보'(증권/시황 전문) 뉴스 목록을 스크래핑한다.
+    한국어라 번역이 필요 없고, 제목/언론사/정확한 시각까지 페이지에 이미 다 있음.
+    공식 API가 아니라 페이지 구조에 의존 - 네이버가 마크업을 바꾸면 이 파싱이 깨질 수 있음.
+    page 파라미터가 새 기사를 순차적으로 주는 게 아니라 최근 기사들을 뒤섞어 반복해서 보여주는
+    방식이라, 여러 페이지를 모아 링크 기준 중복 제거하면 대략 max_items개가 모인다.
+    검색어 없이 네이버가 자체 선정한 목록이라, 카테고리 선택과 무관하게 항상 같은 목록을 준다."""
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+        )
+    }
+    base_url = "https://finance.naver.com"
+    news_list = []
+    seen_links = set()
+    for page in range(1, 6):  # 5페이지 정도 모으면 중복 제거 후 100개 안팎이 됨
+        if len(news_list) >= max_items:
+            break
+        res = requests.get(
+            f"{base_url}/news/news_list.naver",
+            params={"mode": "LSS2D", "section_id": 101, "section_id2": 258, "page": page},
+            headers=headers, timeout=10,
+        )
         res.raise_for_status()
-        soup = BeautifulSoup(res.content, "html.parser")
+        res.encoding = "euc-kr"
+        soup = BeautifulSoup(res.text, "html.parser")
 
-        for attrs in (
-            {"property": "og:description"},
-            {"name": "description"},
-            {"name": "twitter:description"},
-        ):
-            tag = soup.find("meta", attrs=attrs)
-            if tag and tag.get("content"):
-                summary = tag["content"].strip()
-                is_boilerplate = GOOGLE_BOILERPLATE in summary.lower()
-                is_too_short = len(summary) < MIN_SUMMARY_LEN
-                is_outlet_list = looks_like_outlet_list(summary)
-                if summary and not is_boilerplate and not is_too_short and not is_outlet_list:
-                    return summary
-        return ""
-    except Exception:
-        # 언론사 페이지 구조가 다르거나 접속이 막힌 경우 등 - 조용히 실패하고 빈 값 반환
-        return ""
+        for subject_dd in soup.select("dd.articleSubject"):
+            a = subject_dd.find("a")
+            if not a or not a.get("href"):
+                continue
+            link = base_url + a["href"]
+            if link in seen_links:
+                continue
+            seen_links.add(link)
+
+            summary_dd = subject_dd.find_next_sibling("dd", class_="articleSummary")
+            press_el = summary_dd.select_one(".press") if summary_dd else None
+            wdate_el = summary_dd.select_one(".wdate") if summary_dd else None
+
+            news_list.append({
+                "title": a.get_text(strip=True),
+                "link": link,
+                "pub_date": wdate_el.get_text(strip=True) if wdate_el else "",
+                "source": press_el.get_text(strip=True) if press_el else "",
+                "desc": "",
+            })
+
+    news_list.sort(key=lambda x: x["pub_date"], reverse=True)
+    return news_list[:max_items]
 
 
-@st.cache_data(ttl=300)  # 5분 캐시: 같은 키워드로 반복 검색해도 매번 요청하지 않음
-def fetch_google_news(keyword: str, max_items: int = 100):
-    """구글 뉴스 RSS에서 키워드 관련 뉴스를 가져온다. (넉넉히 받아둔 뒤 화면에는 일부만 보여주고,
-    '더보기' 클릭 시 이미 받아온 목록에서 추가로 꺼내 쓴다 - 재요청 없이 빠름)
-    keyword가 MAIN_QUERY이면 특정 주제 검색 없이 구글이 선정한 톱헤드라인 피드를 사용한다."""
-    if keyword == MAIN_QUERY:
-        url = "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
-    else:
-        url = f"https://news.google.com/rss/search?q={quote(keyword)}&hl=ko&gl=KR&ceid=KR:ko"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    res = requests.get(url, headers=headers, timeout=10)
-    res.raise_for_status()
+try:
+    NAVER_CLIENT_ID = st.secrets["NAVER_CLIENT_ID"]
+    NAVER_CLIENT_SECRET = st.secrets["NAVER_CLIENT_SECRET"]
+except Exception:
+    # secrets.toml이 없는 환경(예: 남이 이 repo를 클론한 경우)에서도 앱 전체가
+    # 죽지 않도록 조용히 빈 값으로 처리 - 네이버 쪽만 "키 없음" 안내로 대체됨
+    NAVER_CLIENT_ID = ""
+    NAVER_CLIENT_SECRET = ""
 
-    # bs4의 html.parser는 <link>를 HTML의 self-closing 태그로 착각해서
-    # <link>URL</link> 안의 URL 텍스트를 놓쳐버리는 문제가 있었음(빈 링크 -> 자기 페이지로 되돌아감).
-    # RSS는 표준 XML이므로 파이썬 내장 xml.etree.ElementTree로 파싱하면 이 문제가 없고,
-    # lxml 같은 추가 패키지 설치도 필요 없음.
-    root = ET.fromstring(res.content)
-    items = root.findall(".//item")
+
+def clean_naver_html(text: str) -> str:
+    """네이버 검색 API의 title/description은 검색어 강조용 <b> 태그가 섞여 있고
+    나머지 특수문자는 HTML 엔티티(&quot; 등)로 이스케이프돼 있다. 전체를 다시
+    이스케이프한 뒤 <b> 태그만 살려서, 강조 표시는 유지하되 다른 HTML 삽입은 막는다."""
+    text = html.unescape(text)
+    text = html.escape(text)
+    return text.replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
+
+
+@st.cache_data(ttl=300, show_spinner=False)  # 5분 캐시
+def fetch_naver_news(query: str, target_total: int = 100):
+    """NAVER API HUB의 뉴스 검색 API에서 키워드 관련 뉴스를 가져온다.
+    한 번 호출에 최대 100개까지만 주므로(display 파라미터 상한), target_total을 늘리면
+    start를 1→101→201로 옮겨가며 여러 번 호출해서 이어붙인다(지금은 100개라 호출 1번).
+    (검색 결과가 그보다 적으면 API가 빈 배열을 줘서 자동으로 멈춤)"""
+    if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
+        return []
+    headers = {
+        "X-NCP-APIGW-API-KEY-ID": NAVER_CLIENT_ID,
+        "X-NCP-APIGW-API-KEY": NAVER_CLIENT_SECRET,
+    }
 
     news_list = []
-    for item in items[:max_items]:
-        title_el = item.find("title")
-        link_el = item.find("link")
-        pubdate_el = item.find("pubDate")
-        source_el = item.find("source")
-        desc_el = item.find("description")
+    for start in range(1, target_total + 1, 100):
+        params = {
+            "query": query,
+            "display": min(100, target_total - start + 1),
+            "start": start,
+            "sort": "date",
+            "format": "json",
+        }
+        res = requests.get(
+            "https://naverapihub.apigw.ntruss.com/search/v1/news",
+            params=params, headers=headers, timeout=10,
+        )
+        res.raise_for_status()
+        page_items = res.json().get("items", [])
+        if not page_items:
+            break  # 더 이상 결과 없음 - 조기 종료
 
-        title = title_el.text if title_el is not None and title_el.text else "제목 없음"
-        raw_link = link_el.text.strip() if link_el is not None and link_el.text else "#"
-        link = decode_google_news_link(raw_link)  # 구글 중간 리다이렉트 대신 실제 언론사 URL로 교체 시도
-        pub_date = format_pubdate(pubdate_el.text) if pubdate_el is not None and pubdate_el.text else ""
-        source = source_el.text if source_el is not None and source_el.text else ""
-
-        # 구글 뉴스 RSS의 description은 보통 제목을 감싼 <a> 태그 하나뿐이라
-        # 실질적인 '요약'이 되지 못하는 경우가 많음. 있는 경우에만 사용.
-        desc_text = ""
-        if desc_el is not None and desc_el.text:
-            desc_soup = BeautifulSoup(desc_el.text, "html.parser")
-            # 제목과 중복되는 링크 텍스트는 제외하고 나머지 텍스트만 추출
-            for a_tag in desc_soup.find_all("a"):
-                a_tag.decompose()
-            desc_text = desc_soup.get_text(" ", strip=True)
-
-        news_list.append({
-            "title": title,
-            "link": link,
-            "pub_date": pub_date,
-            "source": source,
-            "desc": desc_text,
-        })
-
-    # pub_date가 "YYYY-MM-DD HH:MM" 형식(0으로 채워진 고정 길이)이라 문자열 그대로
-    # 내림차순 정렬해도 최신순이 됨. 날짜를 못 가져온 항목("")은 자동으로 맨 뒤로 감.
-    news_list.sort(key=lambda x: x["pub_date"], reverse=True)
+        for item in page_items:
+            raw_link = item.get("originallink") or item.get("link") or "#"
+            source = urlparse(raw_link).netloc.replace("www.", "")
+            news_list.append({
+                "title": clean_naver_html(item.get("title", "")),
+                "link": raw_link,
+                "pub_date": format_pubdate(item.get("pubDate", "")),
+                "source": source,
+                "desc": clean_naver_html(item.get("description", "")),
+            })
     return news_list
 
 
-@st.cache_data(ttl=300)  # 5분 캐시
-def fetch_all_categories_news(max_items: int = 150):
-    """'전체' 카테고리용: 정치/경제/사회/문화/IT/국제/스포츠/연예 8개 카테고리 +
-    '주요'(구글 톱헤드라인 피드)까지 전부 합쳐서, 중복(같은 링크)을 제거하고 최신순으로 정렬한다.
-    이렇게 하면 8개 카테고리 검색에는 안 걸리지만 '주요'에만 뜨는 애매한 주제 기사도 빠짐없이 포함됨.
-    (넉넉히 모아둬야 '더보기'를 여러 번 눌렀을 때 며칠 전 기사까지 나올 수 있음)"""
-    all_items = []
-    seen_links = set()
-    for label, query in CATEGORIES.items():
-        if query == ALL_QUERY:
-            continue  # '전체' 자기 자신만 건너뜀 ('주요'는 이제 포함시킴)
-        for item in fetch_google_news(query, max_items=60):
-            if item["link"] not in seen_links:
-                seen_links.add(item["link"])
-                all_items.append(item)
-    all_items.sort(key=lambda x: x["pub_date"], reverse=True)
-    return all_items[:max_items]
+def render_card_list(items, title_is_html: bool):
+    """뉴스 카드 목록만 그린다 ('더보기' 버튼은 호출부에서 각자 다르게 처리).
+    title_is_html=True면 title을 (clean_naver_html로 이미 이스케이프된) HTML로 그대로 쓰고,
+    False면 새로 이스케이프한다."""
+    if not items:
+        st.warning("검색된 뉴스가 없습니다.")
+        return
 
-
-# 4. 구글 뉴스 RSS 연동
-if st.session_state.keyword:
-    if st.session_state.keyword == ALL_QUERY:
-        header_text = "전체 최신 뉴스"
-    elif st.session_state.keyword == MAIN_QUERY:
-        header_text = "주요 뉴스"
-    else:
-        header_text = f"'{st.session_state.label}' 관련 최신 뉴스"
-
-    st.subheader(f"🔍 {header_text}")
-    period_days = 7  # 최근 7일치만 기본으로 노출
-
-    try:
-        if st.session_state.keyword == ALL_QUERY:
-            news_items = fetch_all_categories_news()
-        else:
-            news_items = fetch_google_news(st.session_state.keyword)
-    except requests.exceptions.RequestException as e:
-        news_items = []
-        st.error(f"뉴스를 불러오는 중 오류가 발생했습니다: {e}")
-
-    # 기간 필터: pub_date가 "YYYY-MM-DD HH:MM" 형식이라 문자열 비교로도 날짜 범위를 걸러낼 수 있음.
-    # 날짜를 못 가져온 항목("")은 필터링 없이("전체") 볼 때만 포함.
-    if period_days is not None:
-        cutoff = (datetime.now() - timedelta(days=period_days)).strftime("%Y-%m-%d %H:%M")
-        news_items = [item for item in news_items if item["pub_date"] and item["pub_date"] >= cutoff]
-
-    if news_items:
-        visible_items = news_items[: st.session_state.display_count]
-
-        cards_html = ""
-        for item in visible_items:
-            meta = " | ".join(filter(None, [item["source"], item["pub_date"]]))
-
-            title_esc = html.escape(item["title"])
-            meta_esc = html.escape(meta)
-
-            cards_html += f"""
+    cards_html = ""
+    for item in items:
+        meta = " | ".join(filter(None, [item["source"], item["pub_date"]]))
+        title_html = item["title"] if title_is_html else html.escape(item["title"])
+        cards_html += f"""
 <div style="border:1px solid #e0e0e0; border-radius:6px; padding:6px 12px; margin-bottom:4px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
     <a href="{item['link']}" target="_blank"
        style="font-size:16px; font-weight:600; text-decoration:none; line-height:1.3;">
-        {title_esc}
+        {title_html}
     </a>
-    <span style="font-size:13px; color:#888; white-space:nowrap;">{meta_esc}</span>
+    <span style="font-size:13px; color:#888; white-space:nowrap;">{html.escape(meta)}</span>
 </div>
 """
-        st.markdown(cards_html, unsafe_allow_html=True)
+    st.markdown(cards_html, unsafe_allow_html=True)
 
-        # 아직 안 보여준 기사가 남아있으면 '더보기' 버튼 표시
-        if len(news_items) > st.session_state.display_count:
-            remaining = len(news_items) - st.session_state.display_count
-            if st.button(f"더보기 ({remaining}개 더 있음)", use_container_width=True):
-                st.session_state.display_count += 20
-                st.rerun()
+
+# 4. 뉴스 표시: 왼쪽엔 네이버 뉴스(검색), 오른쪽엔 네이버 금융(증권 전문)
+if st.session_state.keyword:
+    if st.session_state.keyword == ALL_QUERY:
+        header_text = "전체 최신 뉴스"
+        naver_query = "속보"  # 네이버 검색 API는 검색어가 필수라, '전체'/'주요'엔 대체 검색어를 씀
+    elif st.session_state.keyword == MAIN_QUERY:
+        header_text = "주요 뉴스"
+        naver_query = "속보"
     else:
-        st.warning("검색된 뉴스가 없습니다. 다른 키워드를 입력해 보세요.")
+        header_text = f"'{st.session_state.label}' 관련 최신 뉴스"
+        naver_query = st.session_state.keyword
+
+    try:
+        naver_items = fetch_naver_news(naver_query, target_total=st.session_state.naver_target_total)
+    except requests.exceptions.RequestException as e:
+        naver_items = []
+        st.error(f"네이버 뉴스를 불러오는 중 오류가 발생했습니다: {e}")
+
+    # 네이버 금융은 검색어 없이 자체 선정한 증권/시황 목록을 주는 구조라, 카테고리
+    # 선택과 무관하게 항상 같은 목록을 보여줌
+    try:
+        nfinance_items = fetch_naver_finance_news()
+    except requests.exceptions.RequestException as e:
+        nfinance_items = []
+        st.error(f"네이버 금융 뉴스를 불러오는 중 오류가 발생했습니다: {e}")
+
+    naver_col, nfinance_col = st.columns(2)
+    with naver_col:
+        st.subheader(f"🟢 네이버 - {header_text}")
+        if not NAVER_CLIENT_ID:
+            st.info("네이버 API 키가 설정되지 않았습니다 (.streamlit/secrets.toml 확인).")
+        else:
+            render_card_list(naver_items, title_is_html=True)
+            # len(naver_items)가 요청한 target_total만큼 꽉 찼다는 건 더 있을 수도 있다는 뜻.
+            # 그보다 적게 왔다면 API가 이미 바닥까지 준 것이므로 버튼을 숨김.
+            if len(naver_items) >= st.session_state.naver_target_total:
+                if st.button("더보기 (100개 더 가져오기)", key="naver_more", use_container_width=True):
+                    st.session_state.naver_target_total += 100
+                    st.rerun()
+    with nfinance_col:
+        st.subheader("🟠 네이버 금융 - 증권 뉴스")
+        render_card_list(nfinance_items, title_is_html=False)
 else:
     st.write("상단 버튼을 누르거나 키워드를 입력해 뉴스를 검색해 보세요.")
