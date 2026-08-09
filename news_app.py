@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from streamlit_js_eval import streamlit_js_eval
 
 # 1. 페이지 설정
-st.set_page_config(page_title="나만의 뉴스 탐색기", layout="wide")
+st.set_page_config(page_title="뉴스 검색기", layout="wide")
 
 # 2. 날짜/날씨/카테고리 정보
 WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
@@ -107,7 +107,7 @@ def build_mini_calendar_html(year: int, month: int, today_day: int, cell_w: int 
     return "".join(rows)
 
 
-st.title("📰 뉴스 탐색기")
+st.title("📰 뉴스 검색기")
 
 # 아래 컨텐츠 행(카테고리/달력/날씨)과 동일한 비율의 컬럼을 시간 행에도 그대로 사용해서,
 # 시간+새로고침 버튼이 정확히 '달력' 컬럼 바로 위에 오도록 맞춤 (같은 비율 -> 같은 폭/위치).
