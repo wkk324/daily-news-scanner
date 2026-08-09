@@ -172,6 +172,9 @@ st.markdown(
         outline: none !important;
         box-shadow: none !important;
         padding: 0 !important;
+    }
+    .st-key-refresh_btn button,
+    .st-key-refresh_btn button * {
         color: #000 !important;
         font-size: 84px !important;
         font-weight: 700 !important;
