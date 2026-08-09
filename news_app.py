@@ -166,19 +166,21 @@ st.markdown(
         margin: 0 0 -16px 0 !important;
         padding: 0 !important;
     }
-    button[title="새로고침 (기사/요약/위치 다시 받아오기)"] {
+    .st-key-refresh_btn button {
         background: transparent !important;
         border: none !important;
+        outline: none !important;
         box-shadow: none !important;
         padding: 0 !important;
         color: #000 !important;
-        font-size: 40px !important;
+        font-size: 56px !important;
         font-weight: 700 !important;
         line-height: 1 !important;
     }
-    button[title="새로고침 (기사/요약/위치 다시 받아오기)"]:hover {
+    .st-key-refresh_btn button:hover {
         color: #444 !important;
         background: transparent !important;
+        border: none !important;
     }
     </style>
     """,
