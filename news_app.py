@@ -1,4 +1,3 @@
-from bs4 import BeautifulSoup
 import requests
 import streamlit as st
 import html
@@ -28,7 +27,7 @@ if "label" not in st.session_state:
 if "naver_target_total" not in st.session_state:
     st.session_state.naver_target_total = 100  # 네이버는 '더보기' 누를 때마다 100개씩 실제로 더 가져옴
 if "nfinance_target_total" not in st.session_state:
-    st.session_state.nfinance_target_total = 100  # 네이버 금융도 동일하게 '더보기'로 더 가져옴
+    st.session_state.nfinance_target_total = 20  # 네이버 증권 API는 한 번에 최대 80~89개까지만 응답
 if "gps_nonce" not in st.session_state:
     st.session_state.gps_nonce = 0  # 새로고침 버튼을 누를 때마다 증가시켜 GPS 위치를 다시 요청시킴
 
@@ -346,7 +345,7 @@ with outer_left:
                 st.session_state.keyword = query
                 st.session_state.label = label
                 st.session_state.naver_target_total = 100
-                st.session_state.nfinance_target_total = 100
+                st.session_state.nfinance_target_total = 20
 
 st.write("---")
 
@@ -362,65 +361,49 @@ def format_pubdate(raw: str) -> str:
         return raw
 
 
+NFINANCE_MAX_SIZE = 80  # 이 API는 flashNewsSize가 대략 80~89를 넘으면 조용히 빈 목록을 준다 (안전 상한)
+
+
 @st.cache_data(ttl=300)  # 5분 캐시
-def fetch_naver_finance_news(target_total: int = 100):
-    """네이버 금융의 '실시간속보'(증권/시황 전문) 뉴스 목록을 스크래핑한다.
-    한국어라 번역이 필요 없고, 제목/언론사/정확한 시각까지 페이지에 이미 다 있음.
-    공식 API가 아니라 페이지 구조에 의존 - 네이버가 마크업을 바꾸면 이 파싱이 깨질 수 있음.
-    page 파라미터가 새 기사를 순차적으로 주는 게 아니라 최근 기사들을 뒤섞어 반복해서 보여주는
-    방식이라, 여러 페이지를 모아 링크 기준 중복 제거해가며 target_total개가 모일 때까지 이어붙인다.
-    페이지를 계속 넘겨도 새 기사가 하나도 안 나오면(그 시점의 '실시간속보' 목록이 바닥난 것)
-    조기 종료한다. 검색어 없이 네이버가 자체 선정한 목록이라, 카테고리 선택과 무관하게 항상
-    같은 목록을 준다."""
+def fetch_naver_finance_news(target_total: int = 20):
+    """네이버 증권(stock.naver.com)의 '속보'(증권/시황 전문) 뉴스 목록을 가져온다.
+    finance.naver.com은 구주소라 곧 없어질 예정이라, 신주소인 stock.naver.com이 실제로
+    쓰는 내부 API(/api/domestic/news/aggregate/home)를 직접 호출한다. 공식 문서가 있는
+    API가 아니라 페이지가 쓰는 내부 API라, 네이버가 응답 구조를 바꾸면 이 파싱이 깨질 수 있음.
+    이 API는 페이지네이션(offset/cursor) 파라미터가 없어 한 번의 요청으로 최신 기사만
+    가져올 수 있고, flashNewsSize가 NFINANCE_MAX_SIZE를 넘으면 빈 목록을 준다."""
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
         )
     }
-    base_url = "https://finance.naver.com"
+    size = min(target_total, NFINANCE_MAX_SIZE)
+    res = requests.get(
+        "https://stock.naver.com/api/domestic/news/aggregate/home",
+        params={
+            "flashNewsSize": size, "mainNewsSize": 1, "rankingNewsSize": 1,
+            "overseasNewsSize": 1, "focusSize": 1, "moneyStorySize": 1, "noticeSize": 1,
+        },
+        headers=headers, timeout=10,
+    )
+    res.raise_for_status()
+    data = res.json()
+
     news_list = []
-    seen_links = set()
-    max_pages = (target_total // 20 + 2) * 2  # 페이지당 대략 20개씩 오므로 넉넉히 상한을 둠
-    for page in range(1, max_pages + 1):
-        if len(news_list) >= target_total:
-            break
-        before_count = len(news_list)
-        res = requests.get(
-            f"{base_url}/news/news_list.naver",
-            params={"mode": "LSS2D", "section_id": 101, "section_id2": 258, "page": page},
-            headers=headers, timeout=10,
-        )
-        res.raise_for_status()
-        res.encoding = "euc-kr"
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        for subject_dd in soup.select("dd.articleSubject"):
-            a = subject_dd.find("a")
-            if not a or not a.get("href"):
-                continue
-            link = base_url + a["href"]
-            if link in seen_links:
-                continue
-            seen_links.add(link)
-
-            summary_dd = subject_dd.find_next_sibling("dd", class_="articleSummary")
-            press_el = summary_dd.select_one(".press") if summary_dd else None
-            wdate_el = summary_dd.select_one(".wdate") if summary_dd else None
-
-            news_list.append({
-                "title": a.get_text(strip=True),
-                "link": link,
-                "pub_date": wdate_el.get_text(strip=True) if wdate_el else "",
-                "source": press_el.get_text(strip=True) if press_el else "",
-                "desc": "",
-            })
-
-        if len(news_list) == before_count:
-            break  # 이 페이지에서 새 기사가 하나도 없었음 - 더 넘겨도 소용없으므로 중단
-
-    news_list.sort(key=lambda x: x["pub_date"], reverse=True)
-    return news_list[:target_total]
+    for item in data.get("flashNews", []):
+        try:
+            pub_date = datetime.fromisoformat(item["time"]).strftime("%Y-%m-%d %H:%M")
+        except (ValueError, KeyError):
+            pub_date = item.get("time", "")
+        news_list.append({
+            "title": html.unescape(item.get("title", "")),
+            "link": item.get("url", ""),
+            "pub_date": pub_date,
+            "source": item.get("press", ""),
+            "desc": "",
+        })
+    return news_list
 
 
 try:
@@ -551,13 +534,15 @@ if st.session_state.keyword:
                     st.session_state.naver_target_total += 100
                     st.rerun()
     with nfinance_col:
-        st.subheader("🟠 네이버 금융 - 증권 뉴스")
+        st.subheader("🟠 네이버 증권 - 증권 뉴스")
         render_card_list(nfinance_items, title_is_html=False)
-        # 페이지네이션이 도중에 바닥나면(더 이상 새 기사가 없으면) 요청한 개수보다 적게 오므로,
-        # 그럴 땐 버튼을 숨김 (naver_col과 동일한 방식)
-        if len(nfinance_items) >= st.session_state.nfinance_target_total:
-            if st.button("더보기 (100개 더 가져오기)", key="nfinance_more", use_container_width=True):
-                st.session_state.nfinance_target_total += 100
+        # API가 flashNewsSize를 NFINANCE_MAX_SIZE 넘게 요청하면 빈 목록을 주므로,
+        # 이미 상한에 도달했거나 요청한 개수보다 적게 왔다면 버튼을 숨김.
+        at_max = st.session_state.nfinance_target_total >= NFINANCE_MAX_SIZE
+        if not at_max and len(nfinance_items) >= st.session_state.nfinance_target_total:
+            if st.button("더보기 (20개 더 가져오기)", key="nfinance_more", use_container_width=True):
+                st.session_state.nfinance_target_total = min(
+                    st.session_state.nfinance_target_total + 20, NFINANCE_MAX_SIZE)
                 st.rerun()
 else:
     st.write("상단 버튼을 누르거나 키워드를 입력해 뉴스를 검색해 보세요.")
