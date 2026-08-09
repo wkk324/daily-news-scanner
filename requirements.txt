@@ -2,4 +2,4 @@ streamlit
 beautifulsoup4
 pandas
 requests
-streamlit-geolocation
+streamlit-js-eval

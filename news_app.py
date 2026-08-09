@@ -9,7 +9,7 @@ import calendar
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote
-from streamlit_geolocation import streamlit_geolocation
+from streamlit_js_eval import streamlit_js_eval
 
 # 1. 페이지 설정
 st.set_page_config(page_title="나만의 뉴스 탐색기", layout="wide")
@@ -29,6 +29,8 @@ if "label" not in st.session_state:
     st.session_state.label = "전체"
 if "display_count" not in st.session_state:
     st.session_state.display_count = 20  # 처음엔 20개만 보여주고, '더보기' 클릭 시 늘어남
+if "gps_nonce" not in st.session_state:
+    st.session_state.gps_nonce = 0  # 새로고침 버튼을 누를 때마다 증가시켜 GPS 위치를 다시 요청시킴
 
 # 카테고리 라벨: 실제 검색에 쓸 키워드 (일반적인 포털 뉴스 분류 기준)
 CATEGORIES = {
@@ -126,7 +128,8 @@ with time_slot_col:
                 unsafe_allow_html=True,
             )
         with refresh_col:
-            if st.button("↻", key="refresh_btn", help="새로고침 (기사/요약 다시 받아오기)"):
+            if st.button("↻", key="refresh_btn", help="새로고침 (기사/요약/위치 다시 받아오기)"):
+                st.session_state.gps_nonce += 1  # GPS 좌표도 새로 요청하도록 트리거
                 st.cache_data.clear()  # 기사/요약 캐시를 모두 지워서 최신 기사를 다시 받아옴
                 st.rerun()
 
@@ -141,7 +144,30 @@ st.markdown(
         margin-top: -55px;
         margin-bottom: -8px;
     }
-    button[title="새로고침 (기사/요약 다시 받아오기)"] {
+    /* 새로고침 버튼(refresh_col)이 [10,1] 비율 컬럼의 오른쪽 끝에 고정되면서
+       시간 텍스트와 멀리 떨어져 보이던 문제 - 두 컬럼을 내용 크기만큼만 차지하게 줄여서
+       버튼이 텍스트 바로 옆에 붙게 함 */
+    .st-key-time_row [data-testid="stHorizontalBlock"] {
+        justify-content: flex-start !important;
+        flex-wrap: nowrap !important;
+        gap: 8px !important;
+    }
+    .st-key-time_row [data-testid="stColumn"] {
+        width: auto !important;
+        flex: 0 0 auto !important;
+        min-width: 0 !important;
+    }
+    /* GPS 위치 컴포넌트(눈에는 안 보이지만 레이아웃 공간은 차지함)를 접어서,
+       "현재 OO 기온" 줄이 '카테고리 선택'/'달력' 타이틀과 같은 높이에서 시작하게 함.
+       margin-bottom을 음수로 줘서 부모 stVerticalBlock의 flex gap(16px)까지 상쇄함. */
+    .st-key-geo {
+        height: 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 0 -16px 0 !important;
+        padding: 0 !important;
+    }
+    button[title="새로고침 (기사/요약/위치 다시 받아오기)"] {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
@@ -151,7 +177,7 @@ st.markdown(
         font-weight: 700 !important;
         line-height: 1 !important;
     }
-    button[title="새로고침 (기사/요약 다시 받아오기)"]:hover {
+    button[title="새로고침 (기사/요약/위치 다시 받아오기)"]:hover {
         color: #444 !important;
         background: transparent !important;
     }
@@ -163,13 +189,16 @@ st.markdown(
 
 outer_left, _, col_date, col_weather = st.columns(LAYOUT_RATIOS)
 
-CALENDAR_WRAP_HEIGHT = 282  # '📅 달력' 제목 줄이 추가된 만큼 줄여서 날씨란과 바닥을 맞춤
+CALENDAR_CELL_H = 32  # 원래 27에서 조금 키움 - 날씨 표와 길이를 맞추기 위함
+# 요일 헤더 행(패딩+13px 폰트로 실측 약 28px)과 날짜 행(cell_h + td 패딩/보더로 실측 cell_h+5px) 6줄을
+# 더한 실제 렌더링 높이. 이 값을 그대로 날씨 예보 표 높이로도 써서 두 표의 길이를 맞춤.
+CALENDAR_WRAP_HEIGHT = 28 + 6 * (CALENDAR_CELL_H + 5)
 
 with col_date:
     st.markdown("📅 **달력**")
     st.markdown(
         f'<div style="height:{CALENDAR_WRAP_HEIGHT}px;">'
-        + build_mini_calendar_html(now.year, now.month, now.day, cell_w=36)
+        + build_mini_calendar_html(now.year, now.month, now.day, cell_w=36, cell_h=CALENDAR_CELL_H)
         + "</div>",
         unsafe_allow_html=True,
     )
@@ -215,10 +244,18 @@ def locate_by_ip(ip: str):
         return default
 
 
+def _simplify_si_name(si: str) -> str:
+    """'서울특별시' -> '서울', '부산광역시' -> '부산' 처럼 시/도 이름을 짧게 줄인다."""
+    for suffix in ("특별자치시", "특별자치도", "광역시", "특별시"):
+        if si.endswith(suffix):
+            return si[: -len(suffix)]
+    return si
+
+
 @st.cache_data(ttl=3600, show_spinner=False)  # 1시간 캐시 - 같은 좌표를 반복 조회하지 않음
-def reverse_geocode_dong(lat: float, lon: float) -> str:
-    """좌표를 '시 구 동' 수준의 한글 주소로 변환한다 (OpenStreetMap Nominatim, 키 불필요).
-    실패하거나 동 단위 정보가 없으면 빈 문자열을 반환한다 (호출부에서 대체 라벨을 씀)."""
+def reverse_geocode_si(lat: float, lon: float) -> str:
+    """좌표를 '서울', '부산' 같은 시/도 단위 이름으로 변환한다 (OpenStreetMap Nominatim, 키 불필요).
+    구/동까지 보여주면 표시가 지저분해서 시/도까지만 씀. 실패 시 빈 문자열 반환 (호출부에서 대체 라벨을 씀)."""
     try:
         url = "https://nominatim.openstreetmap.org/reverse"
         params = {"format": "jsonv2", "lat": lat, "lon": lon, "zoom": 18, "accept-language": "ko"}
@@ -228,9 +265,7 @@ def reverse_geocode_dong(lat: float, lon: float) -> str:
         res.raise_for_status()
         addr = res.json().get("address", {})
         si = addr.get("city") or addr.get("town") or addr.get("county") or ""
-        gu = addr.get("borough") or addr.get("city_district") or ""
-        dong = addr.get("quarter") or addr.get("suburb") or addr.get("neighbourhood") or ""
-        return " ".join(p for p in (si, gu, dong) if p)
+        return _simplify_si_name(si)
     except Exception:
         return ""
 
@@ -239,17 +274,21 @@ def reverse_geocode_dong(lat: float, lon: float) -> str:
 weather_location_label, weather_lat, weather_lon = locate_by_ip(st.context.ip_address)
 
 with col_weather:
-    # 브라우저 GPS: 예전엔 <script>를 st.components.v1.html/st.iframe으로 직접 넣었는데,
-    # 그렇게 만든 iframe은 기본적으로 geolocation 권한이 Permissions Policy로 막혀 있어서
-    # navigator.geolocation 호출이 항상 조용히 실패했음. streamlit-geolocation은 정식
-    # Streamlit 커스텀 컴포넌트라 컴포넌트 iframe에 geolocation 권한이 정상적으로 허용되어
-    # 브라우저 위치 권한 팝업이 뜬다. 버튼을 눌러야 좌표를 요청한다 (자동 요청 아님).
-    gps_loc = streamlit_geolocation()
-    if gps_loc and gps_loc.get("latitude") is not None:
-        weather_lat = gps_loc["latitude"]
-        weather_lon = gps_loc["longitude"]
-        dong_label = reverse_geocode_dong(weather_lat, weather_lon)
-        weather_location_label = dong_label or "내 위치"
+    # 브라우저 GPS: streamlit-js-eval로 getLocation()을 실행한다. 버튼 클릭 없이
+    # 컴포넌트가 렌더링되는 즉시 navigator.geolocation을 호출하며, 위치 권한 팝업은
+    # 오리진당 최초 1회만 뜨고 그 이후엔 조용히 좌표를 반환한다. js_expressions
+    # 문자열에 gps_nonce를 섞어 넣어서, 이 값이 바뀔 때(= 새로고침 버튼을 눌렀을 때)만
+    # 컴포넌트가 재평가하도록 함 (동일 문자열이면 프론트엔드가 재평가를 건너뛰고
+    # 이전에 받아온 좌표를 세션 상태에서 그대로 재사용함).
+    gps_result = streamlit_js_eval(
+        js_expressions=f"getLocation() /* nonce:{st.session_state.gps_nonce} */",
+        key="geo",
+    )
+    if gps_result and gps_result.get("coords"):
+        weather_lat = gps_result["coords"]["latitude"]
+        weather_lon = gps_result["coords"]["longitude"]
+        si_label = reverse_geocode_si(weather_lat, weather_lon)
+        weather_location_label = si_label or "내 위치"
 
     try:
         weather_res = fetch_weather(weather_lat, weather_lon)
@@ -267,11 +306,17 @@ with col_weather:
         codes = hourly["weather_code"]
         pops = hourly["precipitation_probability"]
 
+        hour_indices = list(range(0, len(times), 3))
+        # 행 개수만큼 나눠서 각 행 높이를 고정해두면, 캘린더와 같은 높이(282px) 안에
+        # 빈 공간 없이 딱 채워짐 (padding만으로는 이모지/줄바꿈에 따라 실제 높이가
+        # 들쭉날쭉해서 box-sizing:border-box + 고정 height로 맞춤).
+        row_height = CALENDAR_WRAP_HEIGHT / len(hour_indices)
+
         hour_rows = ""
-        for i in range(0, len(times), 3):
+        for i in hour_indices:
             hour_only = times[i].split("T")[1][:2] + "시"
             hour_rows += f"""
-<div style="display:flex; justify-content:space-between; align-items:center; padding:3px 8px; border-bottom:1px solid #f0f0f0; font-size:12px;">
+<div style="display:flex; justify-content:space-between; align-items:center; height:{row_height}px; box-sizing:border-box; padding:0 8px; border-bottom:1px solid #f0f0f0; font-size:12px;">
     <span style="color:#666; width:32px;">{hour_only}</span>
     <span style="font-size:15px;">{weather_emoji(codes[i])}</span>
     <span style="font-weight:600; width:38px; text-align:right;">{temps[i]}℃</span>
@@ -280,7 +325,7 @@ with col_weather:
 """
         st.markdown(
             f'<div style="border:1px solid #eee; border-radius:6px; '
-            f'width:50%; max-height:220px; overflow-y:auto;">{hour_rows}</div>',
+            f'width:50%; height:{CALENDAR_WRAP_HEIGHT}px; overflow:hidden; box-sizing:border-box;">{hour_rows}</div>',
             unsafe_allow_html=True,
         )
     except Exception as e:
@@ -481,13 +526,8 @@ if st.session_state.keyword:
     else:
         header_text = f"'{st.session_state.label}' 관련 최신 뉴스"
 
-    header_col, period_col = st.columns([3, 1])
-    with header_col:
-        st.subheader(f"🔍 {header_text}")
-    with period_col:
-        PERIOD_OPTIONS = {"오늘": 1, "3일": 3, "1주일": 7, "전체": None}
-        period_label = st.selectbox("기간", list(PERIOD_OPTIONS.keys()), index=3, label_visibility="collapsed")
-        period_days = PERIOD_OPTIONS[period_label]
+    st.subheader(f"🔍 {header_text}")
+    period_days = 7  # 최근 7일치만 기본으로 노출
 
     try:
         if st.session_state.keyword == ALL_QUERY:
@@ -517,10 +557,10 @@ if st.session_state.keyword:
             cards_html += f"""
 <div style="border:1px solid #e0e0e0; border-radius:6px; padding:6px 12px; margin-bottom:4px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
     <a href="{item['link']}" target="_blank"
-       style="font-size:14px; font-weight:600; text-decoration:none; line-height:1.3;">
+       style="font-size:16px; font-weight:600; text-decoration:none; line-height:1.3;">
         {title_esc}
     </a>
-    <span style="font-size:11px; color:#888; white-space:nowrap;">{meta_esc}</span>
+    <span style="font-size:13px; color:#888; white-space:nowrap;">{meta_esc}</span>
 </div>
 """
         st.markdown(cards_html, unsafe_allow_html=True)
