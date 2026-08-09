@@ -176,7 +176,7 @@ st.markdown(
     .st-key-refresh_btn button,
     .st-key-refresh_btn button * {
         color: #000 !important;
-        font-size: 84px !important;
+        font-size: 21px !important;
         font-weight: 700 !important;
         line-height: 1 !important;
     }
