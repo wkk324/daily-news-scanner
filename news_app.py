@@ -149,7 +149,7 @@ st.markdown(
     .st-key-time_row [data-testid="stHorizontalBlock"] {
         justify-content: flex-start !important;
         flex-wrap: nowrap !important;
-        gap: 20px !important;
+        gap: 8px !important;
     }
     .st-key-time_row [data-testid="stColumn"] {
         width: auto !important;
