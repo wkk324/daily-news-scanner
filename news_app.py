@@ -237,7 +237,6 @@ def reverse_geocode_dong(lat: float, lon: float) -> str:
 
 # 접속 IP로 위치 추정 (기본값 - GPS 권한을 아직 못 받았거나 거부됐을 때 쓰는 fallback)
 weather_location_label, weather_lat, weather_lon = locate_by_ip(st.context.ip_address)
-location_source = "IP"
 
 with col_weather:
     # 브라우저 GPS: 예전엔 <script>를 st.components.v1.html/st.iframe으로 직접 넣었는데,
@@ -249,7 +248,6 @@ with col_weather:
     if gps_loc and gps_loc.get("latitude") is not None:
         weather_lat = gps_loc["latitude"]
         weather_lon = gps_loc["longitude"]
-        location_source = "GPS"
         dong_label = reverse_geocode_dong(weather_lat, weather_lon)
         weather_location_label = dong_label or "내 위치"
 
@@ -261,7 +259,6 @@ with col_weather:
         st.markdown(
             f"{weather_emoji(current_code)} **현재 {weather_location_label} 기온:** {current_temp}℃"
         )
-        st.caption(f"(위치 소스: {location_source}, 좌표: {weather_lat:.4f}, {weather_lon:.4f})")  # 원인 파악용 - 문제 없으면 나중에 지워도 됨
 
         # 시간대별 예보를 3시간 간격으로 위에서 아래로 나열
         hourly = weather_res["hourly"]
