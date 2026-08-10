@@ -27,7 +27,7 @@ if "label" not in st.session_state:
 if "naver_target_total" not in st.session_state:
     st.session_state.naver_target_total = 100  # 네이버는 '더보기' 누를 때마다 100개씩 실제로 더 가져옴
 if "nfinance_target_total" not in st.session_state:
-    st.session_state.nfinance_target_total = 20  # 네이버 증권 API는 한 번에 최대 80~89개까지만 응답
+    st.session_state.nfinance_target_total = 50  # 네이버 증권 API는 한 번에 최대 86개까지만 응답
 if "gps_nonce" not in st.session_state:
     st.session_state.gps_nonce = 0  # 새로고침 버튼을 누를 때마다 증가시켜 GPS 위치를 다시 요청시킴
 
@@ -350,7 +350,7 @@ with outer_left:
                 st.session_state.keyword = query
                 st.session_state.label = label
                 st.session_state.naver_target_total = 100
-                st.session_state.nfinance_target_total = 20
+                st.session_state.nfinance_target_total = 50
 
 st.write("---")
 
@@ -366,7 +366,7 @@ def format_pubdate(raw: str) -> str:
         return raw
 
 
-NFINANCE_MAX_SIZE = 80  # 이 API는 flashNewsSize가 대략 80~89를 넘으면 조용히 빈 목록을 준다 (안전 상한)
+NFINANCE_MAX_SIZE = 86  # 이 API는 flashNewsSize가 87 이상이면 조용히 빈 목록을 준다 (실측한 절대 상한)
 
 
 @st.cache_data(ttl=300)  # 5분 캐시
@@ -545,9 +545,9 @@ if st.session_state.keyword:
         # 이미 상한에 도달했거나 요청한 개수보다 적게 왔다면 버튼을 숨김.
         at_max = st.session_state.nfinance_target_total >= NFINANCE_MAX_SIZE
         if not at_max and len(nfinance_items) >= st.session_state.nfinance_target_total:
-            if st.button("더보기 (20개 더 가져오기)", key="nfinance_more", use_container_width=True):
+            if st.button("더보기 (50개 더 가져오기)", key="nfinance_more", use_container_width=True):
                 st.session_state.nfinance_target_total = min(
-                    st.session_state.nfinance_target_total + 20, NFINANCE_MAX_SIZE)
+                    st.session_state.nfinance_target_total + 50, NFINANCE_MAX_SIZE)
                 st.rerun()
 else:
     st.write("상단 버튼을 누르거나 키워드를 입력해 뉴스를 검색해 보세요.")
