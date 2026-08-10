@@ -27,7 +27,7 @@ if "label" not in st.session_state:
 if "naver_target_total" not in st.session_state:
     st.session_state.naver_target_total = 100  # 네이버는 '더보기' 누를 때마다 100개씩 실제로 더 가져옴
 if "nfinance_target_total" not in st.session_state:
-    st.session_state.nfinance_target_total = 50  # 네이버 증권 API는 한 번에 최대 86개까지만 응답
+    st.session_state.nfinance_target_total = 86  # 네이버 증권 API는 한 번에 최대 86개까지만 응답 - 처음부터 다 가져옴
 if "gps_nonce" not in st.session_state:
     st.session_state.gps_nonce = 0  # 새로고침 버튼을 누를 때마다 증가시켜 GPS 위치를 다시 요청시킴
 
@@ -350,7 +350,7 @@ with outer_left:
                 st.session_state.keyword = query
                 st.session_state.label = label
                 st.session_state.naver_target_total = 100
-                st.session_state.nfinance_target_total = 50
+                st.session_state.nfinance_target_total = 86
 
 st.write("---")
 
@@ -541,13 +541,7 @@ if st.session_state.keyword:
     with nfinance_col:
         st.subheader("🟠 네이버 증권 - 증권 뉴스")
         render_card_list(nfinance_items, title_is_html=False)
-        # API가 flashNewsSize를 NFINANCE_MAX_SIZE 넘게 요청하면 빈 목록을 주므로,
-        # 이미 상한에 도달했거나 요청한 개수보다 적게 왔다면 버튼을 숨김.
-        at_max = st.session_state.nfinance_target_total >= NFINANCE_MAX_SIZE
-        if not at_max and len(nfinance_items) >= st.session_state.nfinance_target_total:
-            if st.button("더보기 (50개 더 가져오기)", key="nfinance_more", use_container_width=True):
-                st.session_state.nfinance_target_total = min(
-                    st.session_state.nfinance_target_total + 50, NFINANCE_MAX_SIZE)
-                st.rerun()
+        # 이 API가 한 번에 줄 수 있는 절대 최댓값(NFINANCE_MAX_SIZE)을 처음부터 요청하므로
+        # '더보기'로 더 가져올 여지가 없어 버튼 없이 바로 전부 보여준다.
 else:
     st.write("상단 버튼을 누르거나 키워드를 입력해 뉴스를 검색해 보세요.")
